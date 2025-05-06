@@ -1,0 +1,45 @@
+cat > .gitignore << EOL
+# Data directories
+data/
+results/
+logs/
+
+# Experiment outputs
+*.npz
+*.h5
+*.hdf5
+*.png
+*.jpg
+
+# Python stuff
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+qgw_env/
+.env
+
+# Editor specific
+.vscode/
+.idea/
+.ipynb_checkpoints
+EOL
