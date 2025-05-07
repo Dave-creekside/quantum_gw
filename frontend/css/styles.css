@@ -750,20 +750,109 @@ p.error {
 
 
 /* Responsive Adjustments */
+
+/* Tablet and smaller (General adjustments) */
 @media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .main-nav {
+        margin-top: 1rem;
+        width: 100%;
+    }
     .main-nav ul {
-        flex-direction: column;
+        /* Keep horizontal on tablet for now, might wrap */
+        flex-wrap: wrap;
+        justify-content: flex-start;
     }
-    
     .main-nav li {
-        margin: 0.5rem 0;
+        margin: 0.25rem 0.5rem; /* Adjust spacing */
+        margin-left: 0; /* Reset left margin */
     }
-    
+    .theme-toggle {
+        position: absolute; /* Position toggle top right */
+        top: 1rem;
+        right: 1rem;
+        margin-left: 0;
+    }
+    #header-spinner {
+         position: absolute;
+         top: 1rem;
+         right: 6rem; /* Adjust position relative to toggle */
+         margin-left: 0;
+    }
+
     .dashboard-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr; /* Stack cards */
     }
-    
+
     .form-actions {
-        flex-direction: column;
+        flex-direction: column; /* Stack buttons */
+        gap: 0.5rem;
     }
+
+    /* Adjust chart label width on smaller screens */
+    .chart-label {
+        width: 100px; /* Reduce fixed width */
+        text-align: left;
+        white-space: normal; /* Allow wrapping */
+    }
+    .chart-bar-container {
+        flex-direction: column; /* Stack label and bar */
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+}
+
+/* Phone specific adjustments */
+@media (max-width: 576px) {
+     header {
+         padding: 0.75rem 1rem; /* Reduce header padding */
+     }
+    .main-nav ul {
+        justify-content: space-around; /* Space out icons */
+        width: 100%;
+    }
+     .main-nav li {
+         margin: 0; /* Remove extra margins */
+     }
+    .main-nav a span {
+        display: none; /* Hide text label */
+    }
+    .main-nav a i {
+        font-size: 1.2rem; /* Make icons slightly larger */
+        margin: 0 0.5rem; /* Add some horizontal spacing */
+    }
+     .theme-toggle {
+         top: 0.75rem;
+         right: 0.75rem;
+     }
+     #header-spinner {
+         top: 0.75rem;
+         right: 5rem; /* Adjust position */
+     }
+
+    .panel {
+        padding: 1rem; /* Reduce panel padding */
+    }
+    h2 {
+        font-size: 1.5rem; /* Reduce heading size */
+    }
+    .card {
+         padding: 1rem;
+    }
+    .button, button { /* Reduce button padding */
+         padding: 0.6rem 1rem;
+         font-size: 0.9rem;
+    }
+    .project-actions button { /* Even smaller buttons in list */
+         padding: 0.4rem 0.6rem;
+         font-size: 0.8rem;
+    }
+}
+
+/* Prevent horizontal scroll */
+body {
+    overflow-x: hidden;
 }
