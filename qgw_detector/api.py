@@ -3,6 +3,7 @@ import os
 import json
 import numpy as np
 import time
+import uuid
 from datetime import datetime
 
 from qgw_detector.data.ligo import fetch_gw_data, preprocess_gw_data
@@ -75,9 +76,9 @@ class QuantumGWAPI:
         self.presets[name] = config
         return {"message": f"Preset '{name}' added successfully.", "presets": self.presets}
     
-    def run_pipeline(self, pipeline_config, save_results=True, save_visualization=True):
+    def run_pipeline(self, pipeline_config, save_results=True, save_visualization=True, active_project_id=None, **kwargs):
         """
-        Run a pipeline configuration
+        Run a pipeline configuration, optionally associating it with a project.
         
         Args:
             pipeline_config: List of (qubit, topology) tuples
@@ -185,11 +186,12 @@ class QuantumGWAPI:
             with open(results_path, 'w') as f:
                 json.dump(pipeline_results, f, indent=2)
             
-            pipeline_results['file_paths'] = {
-                'results': results_path
-            }
-        
-        # Generate visualization if requested
+            # Initialize file_paths if it doesn't exist
+            if 'file_paths' not in pipeline_results:
+                 pipeline_results['file_paths'] = {}
+            pipeline_results['file_paths']['results'] = results_path # Store results path
+
+        # Generate visualization if requested (BEFORE saving results JSON)
         if save_visualization:
             from qgw_detector.visualization.plots import create_pipeline_visualization
             
@@ -197,12 +199,42 @@ class QuantumGWAPI:
             os.makedirs(output_dir, exist_ok=True)
             
             viz_path = os.path.join(output_dir, f"pipeline_{pipeline_str}.png")
-            create_pipeline_visualization(pipeline_results, viz_path)
-            
-            if 'file_paths' not in pipeline_results:
-                pipeline_results['file_paths'] = {}
-            pipeline_results['file_paths']['visualization'] = viz_path
-        
+            print(f"[run_pipeline] Generating visualization at: {viz_path}")
+            try:
+                create_pipeline_visualization(pipeline_results, viz_path)
+                # Add viz path to the results dict *before* saving
+                if 'file_paths' not in pipeline_results:
+                    pipeline_results['file_paths'] = {}
+                pipeline_results['file_paths']['visualization'] = viz_path
+                print(f"[run_pipeline] Visualization path added to results: {viz_path}")
+            except Exception as e:
+                 print(f"[run_pipeline] Error generating visualization: {e}")
+                 # Decide if we should still save results or raise error
+                 # For now, just log it and continue without viz path
+
+        # Save results JSON *after* potentially adding visualization path
+        if save_results:
+            results_path = pipeline_results['file_paths']['results'] # Get path saved earlier
+            print(f"[run_pipeline] Saving final results JSON (with potential viz path) to: {results_path}")
+            with open(results_path, 'w') as f:
+                json.dump(pipeline_results, f, indent=2)
+            print(f"[run_pipeline] Results JSON saved successfully.")
+
+
+        # Associate run with active project if provided (AFTER saving results)
+        # active_project_id is now a direct argument from the signature
+        print(f"[run_pipeline] Checking association for project ID: {active_project_id}") # Log the ID being checked
+        if active_project_id and save_results:
+            print(f"[run_pipeline] Attempting to associate run {timestamp} with project {active_project_id}")
+            try:
+                self.add_run_to_project(active_project_id, timestamp)
+            except Exception as e:
+                print(f"[run_pipeline] Warning: Could not associate run {timestamp} with project {active_project_id}: {e}")
+        elif not active_project_id:
+             print("[run_pipeline] No active project ID provided, skipping run association.")
+        elif not save_results:
+             print("[run_pipeline] save_results is False, skipping run association.")
+
         # Store in cache
         self.results_cache[cache_key] = pipeline_results
         
@@ -315,16 +347,19 @@ class QuantumGWAPI:
 
         self._ensure_data_loaded() # Ensure data is loaded based on current config (e.g. event_name)
 
+        active_project_id = kwargs.get('active_project_id') # Get project ID from kwargs
+
         for qubits in qubit_counts:
             if self.config.get('use_zx_opt') and qubits == 8 and topology == 'full':
                 print(f"Warning: Skipping 8-qubit full topology with ZX optimization due to potential issues.")
                 continue
             pipeline_config = [(qubits, topology)]
             run_name = f"{qubits}q-{topology}"
-            print(f"Running sweep: {run_name}")
+            print(f"Running sweep: {run_name} for project {active_project_id}")
             try:
-                result = self.run_pipeline(pipeline_config)
-                result['name'] = run_name 
+                # Pass active_project_id to run_pipeline
+                result = self.run_pipeline(pipeline_config, active_project_id=active_project_id)
+                result['name'] = run_name
                 results.append(result)
             except Exception as e:
                 print(f"Error running pipeline {run_name}: {e}")
@@ -343,15 +378,18 @@ class QuantumGWAPI:
 
         self._ensure_data_loaded()
 
+        active_project_id = kwargs.get('active_project_id') # Get project ID from kwargs
+
         for topology in topologies:
             if self.config.get('use_zx_opt') and qubit_count == 8 and topology == 'full':
                 print(f"Warning: Skipping 8-qubit full topology with ZX optimization due to potential issues.")
                 continue
             pipeline_config = [(qubit_count, topology)]
             run_name = f"{qubit_count}q-{topology}"
-            print(f"Running sweep: {run_name}")
+            print(f"Running sweep: {run_name} for project {active_project_id}")
             try:
-                result = self.run_pipeline(pipeline_config)
+                 # Pass active_project_id to run_pipeline
+                result = self.run_pipeline(pipeline_config, active_project_id=active_project_id)
                 result['name'] = run_name
                 results.append(result)
             except Exception as e:
@@ -378,13 +416,16 @@ class QuantumGWAPI:
         
         original_api_scale_factor = self.config['scale_factor'] # Save the API's current scale_factor
 
+        active_project_id = kwargs.get('active_project_id') # Get project ID from kwargs
+
         for factor in scale_factors:
             self.config['scale_factor'] = factor # Temporarily set API's scale_factor for this run
             run_name = f"scale_{factor:.2e}"
-            print(f"Running sweep: {run_name} for pipeline {'_'.join([f'{q}-{t}' for q, t in pipeline_config])}")
+            print(f"Running sweep: {run_name} for pipeline {'_'.join([f'{q}-{t}' for q, t in pipeline_config])} for project {active_project_id}")
             try:
                 # run_pipeline uses self.config['scale_factor']
-                result = self.run_pipeline(pipeline_config) 
+                # Pass active_project_id to run_pipeline
+                result = self.run_pipeline(pipeline_config, active_project_id=active_project_id)
                 result['name'] = run_name
                 results.append(result)
             except Exception as e:
@@ -435,7 +476,304 @@ class QuantumGWAPI:
         return {"message": "Detailed ZX-calculus optimization not yet implemented.",
                 "optimization_level": optimization_level}
     # --- End Advanced Tools ---
+
+    def create_project(self, name: str, base_configuration: dict):
+        """
+        Creates a new project workspace file.
+
+        Args:
+            name: User-defined name for the project.
+            base_configuration: The initial configuration settings for this project.
+                                Should include event_name, parameters, pipeline_config.
+
+        Returns:
+            Dict with status and the new project's ID.
+        """
+        try:
+            projects_dir = os.path.join(os.path.dirname(self.results_dir), "projects")
+            os.makedirs(projects_dir, exist_ok=True)
+            print(f"Projects directory: {projects_dir}")
+
+            project_id = str(uuid.uuid4())
+            created_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            project_data = {
+                "id": project_id,
+                "name": name,
+                "created_timestamp": created_timestamp,
+                "base_configuration": base_configuration,
+                "associated_runs": []  # Initialize with empty list of run identifiers
+            }
+
+            # Use project ID for the filename for easier lookup
+            filename = f"{project_id}.json"
+            file_path = os.path.join(projects_dir, filename)
+
+            with open(file_path, "w") as f:
+                json.dump(project_data, f, indent=2)
+
+            print(f"Project '{name}' created with ID {project_id} at {file_path}")
+
+            return {
+                "success": True,
+                "message": f"Project '{name}' created successfully.",
+                "project_id": project_id,
+                "file_path": file_path
+            }
+        except Exception as e:
+            print(f"Error creating project: {e}")
+            return {
+                "success": False,
+                "message": f"Error creating project: {str(e)}",
+                "error": str(e)
+            }
     
+    def list_projects(self):
+        """
+        List available saved projects
+        
+        Returns:
+            List of project metadata (id, name, date, etc)
+        """
+        try:
+            # Create projects directory if it doesn't exist
+            projects_dir = os.path.join(os.path.dirname(self.results_dir), "projects")
+            os.makedirs(projects_dir, exist_ok=True)
+            print(f"Projects directory exists: {os.path.exists(projects_dir)}")
+            print(f"Looking for projects in: {projects_dir}")
+            
+            if not os.path.exists(projects_dir):
+                print(f"Projects directory does not exist even after attempting to create it: {projects_dir}")
+                return []
+            
+            files = os.listdir(projects_dir)
+            print(f"Files in projects directory: {files}")
+            
+            projects = []
+            for filename in files:
+                if filename.endswith(".json"):
+                    file_path = os.path.join(projects_dir, filename)
+                    try:
+                        with open(file_path, "r") as f:
+                            project_data = json.load(f)
+                        
+                        # Extract relevant metadata from the project file
+                        project_id = project_data.get("id")
+                        project_name = project_data.get("name", "Unnamed Project")
+                        created_timestamp = project_data.get("created_timestamp", "") # Use created_timestamp for sorting
+
+                        if not project_id:
+                             print(f"Warning: Skipping project file {filename} due to missing 'id'.")
+                             continue
+
+                        projects.append({
+                            "id": project_id,
+                            "name": project_name,
+                            "timestamp": created_timestamp, # Use created_timestamp for sorting/display
+                            "file_path": file_path
+                        })
+                        print(f"Found project: {project_name} (ID: {project_id})")
+                    except json.JSONDecodeError:
+                        print(f"Error: Could not decode JSON from project file {filename}")
+                    except Exception as e:
+                        print(f"Error processing project file {filename}: {e}")
+
+            print(f"Total valid projects found: {len(projects)}")
+
+            # Sort by creation timestamp, newest first
+            projects.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+            return projects
+        except Exception as e:
+            print(f"Error listing projects: {e}")
+            return []
+    
+    def load_project(self, project_id: str):
+        """
+        Load a saved project
+        
+        Args:
+            project_id: Project identifier
+            
+        Returns:
+            Project configuration
+        """
+        try:
+            print(f"Loading project with ID: {project_id}")
+            projects_dir = os.path.join(os.path.dirname(self.results_dir), "projects")
+            os.makedirs(projects_dir, exist_ok=True)
+            
+            # If project_id is a file path, use it directly
+            if os.path.exists(project_id) and project_id.endswith(".json"):
+                file_path = project_id
+                print(f"Using direct file path: {file_path}")
+            else:
+                print(f"Searching for project by ID in: {projects_dir}")
+                # List files in the directory
+                files = os.listdir(projects_dir)
+                print(f"Files in directory: {files}")
+                
+                # Search for the project by ID
+                file_path = None
+                for filename in files:
+                    if filename.endswith(".json"):
+                        current_path = os.path.join(projects_dir, filename)
+                        try:
+                            with open(current_path, "r") as f:
+                                current_data = json.load(f)
+                            
+                            current_id = current_data.get("id")
+                            print(f"Checking file {filename} with ID: {current_id}")
+                            
+                            if current_id == project_id:
+                                file_path = current_path
+                                print(f"Found matching project: {file_path}")
+                                break
+                        except Exception as e:
+                            print(f"Error reading project file {filename}: {e}")
+                            continue
+                
+                if not file_path:
+                    error_msg = f"Project with ID {project_id} not found"
+                    print(error_msg)
+                    raise FileNotFoundError(error_msg)
+            
+            # Load the project data
+            print(f"Loading project data from: {file_path}")
+            with open(file_path, "r") as f:
+                project_data = json.load(f)
+            
+            print(f"Successfully loaded project: {project_data.get('name', 'Unnamed')}")
+            return project_data
+
+        except FileNotFoundError:
+             # Re-raise FileNotFoundError specifically so the web API can return 404
+             raise
+        except Exception as e:
+            print(f"Error loading project: {e}")
+            # Raise a generic exception for other errors
+            raise Exception(f"Failed to load project data for ID {project_id}: {e}")
+
+    def add_run_to_project(self, project_id: str, run_timestamp: str):
+        """
+        Associates a run (identified by its timestamp) with a project.
+
+        Args:
+            project_id: The ID of the project to update.
+            run_timestamp: The timestamp identifier of the run to add.
+        """
+        try:
+            projects_dir = os.path.join(os.path.dirname(self.results_dir), "projects")
+            project_filename = f"{project_id}.json"
+            project_filepath = os.path.join(projects_dir, project_filename)
+            print(f"[add_run_to_project] Attempting to update project file: {project_filepath}")
+
+            if not os.path.exists(project_filepath):
+                print(f"[add_run_to_project] Error: Project file not found for ID {project_id} at {project_filepath}")
+                raise FileNotFoundError(f"Project file not found for ID {project_id}")
+
+            # Load existing project data
+            print(f"[add_run_to_project] Loading existing data from {project_filepath}")
+            with open(project_filepath, "r") as f:
+                project_data = json.load(f)
+            print(f"[add_run_to_project] Loaded data: {project_data}")
+
+            # Add the run timestamp if not already present
+            if "associated_runs" not in project_data:
+                project_data["associated_runs"] = []
+                print("[add_run_to_project] Initialized 'associated_runs' list.")
+
+            if run_timestamp not in project_data["associated_runs"]:
+                print(f"[add_run_to_project] Appending run timestamp: {run_timestamp}")
+                project_data["associated_runs"].append(run_timestamp)
+                # Optional: Sort runs by timestamp? For now, just append.
+                # project_data["associated_runs"].sort(reverse=True)
+
+                # Save the updated project data
+                print(f"[add_run_to_project] Saving updated data back to {project_filepath}")
+                with open(project_filepath, "w") as f:
+                    json.dump(project_data, f, indent=2)
+                print(f"[add_run_to_project] Successfully associated run {run_timestamp} with project {project_id}")
+            else:
+                print(f"[add_run_to_project] Run {run_timestamp} already associated with project {project_id}. No update needed.")
+
+        except Exception as e:
+            print(f"Error adding run {run_timestamp} to project {project_id}: {e}")
+            # Decide if this should raise an exception or just log the warning
+            # For now, just print, as the main run succeeded anyway.
+
+    def get_project_run_details(self, project_id: str):
+        """
+        Retrieves summary details for all runs associated with a project.
+
+        Args:
+            project_id: The ID of the project.
+
+        Returns:
+            List of dictionaries, each containing summary details for a run.
+        """
+        try:
+            print(f"[get_project_run_details] Getting runs for project ID: {project_id}")
+            project_data = self.load_project(project_id) # Reuse load_project to get the data
+            print(f"[get_project_run_details] Loaded project data: {project_data}") # Log loaded data
+            run_identifiers = project_data.get("associated_runs", [])
+            print(f"[get_project_run_details] Found {len(run_identifiers)} associated runs: {run_identifiers}") # Log the identifiers
+
+            run_details = []
+            for run_timestamp in run_identifiers:
+                print(f"Processing run timestamp: {run_timestamp}")
+                try:
+                    # Construct the expected results file path based on timestamp
+                    # Note: We don't know the exact pipeline_str here, so we need to find the results file.
+                    run_dir = os.path.join(self.results_dir, run_timestamp)
+                    if not os.path.isdir(run_dir):
+                        print(f"Warning: Run directory not found for timestamp {run_timestamp}")
+                        continue
+
+                    results_file = None
+                    for filename in os.listdir(run_dir):
+                        if filename.startswith("results_") and filename.endswith(".json"):
+                            results_file = os.path.join(run_dir, filename)
+                            break
+                    
+                    if not results_file:
+                        print(f"Warning: Results JSON file not found in {run_dir}")
+                        continue
+
+                    # Load the results data for this run
+                    print(f"Loading results file: {results_file}")
+                    with open(results_file, "r") as f:
+                        run_data = json.load(f)
+                    print(f"Successfully loaded results for run {run_timestamp}")
+
+                    # Extract summary information
+                    summary = run_data.get("summary", {})
+                    run_details.append({
+                        "run_timestamp": run_timestamp,
+                        "pipeline_config_str": run_data.get("pipeline_config", "Unknown"),
+                        "event_name": run_data.get("event_name", "Unknown"),
+                        "final_snr": summary.get("final_stage_snr"),
+                        "max_qfi": run_data.get("stages", [{}])[-1].get("max_qfi"), # Max QFI from last stage
+                        "visualization_path": run_data.get("file_paths", {}).get("visualization")
+                    })
+                except Exception as e:
+                    print(f"Error loading details for run {run_timestamp}: {e}")
+                    # Optionally add an error entry to the list
+                    run_details.append({
+                        "run_timestamp": run_timestamp,
+                        "error": f"Failed to load details: {e}"
+                    })
+            
+            # Sort details by timestamp, newest first
+            run_details.sort(key=lambda x: x.get("run_timestamp", ""), reverse=True)
+            return run_details
+
+        except FileNotFoundError:
+            # Project file itself not found
+            raise
+        except Exception as e:
+            print(f"Error getting run details for project {project_id}: {e}")
+            raise Exception(f"Failed to get run details for project {project_id}: {e}")
+
     def get_available_events(self):
         """Get list of available gravitational wave events"""
         return ["GW150914", "GW151226", "GW170104", "GW170814", "GW170817"]

@@ -15,11 +15,13 @@
         </div>
         <nav class="main-nav">
             <ul>
-                <li><a href="#" id="nav-dashboard" class="active"><i class="fas fa-home"></i> Dashboard</a></li>
+                <li><a href="#" id="nav-dashboard" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
                 <li><a href="#" id="nav-config"><i class="fas fa-cog"></i> Configuration</a></li>
-                <li><a href="#" id="nav-pipelines"><i class="fas fa-project-diagram"></i> Run Pipelines</a></li>
+                <li><a href="#" id="nav-pipelines"><i class="fas fa-project-diagram"></i> Pipelines</a></li>
                 <li><a href="#" id="nav-results"><i class="fas fa-chart-bar"></i> Results</a></li>
                 <li><a href="#" id="nav-sweeps"><i class="fas fa-sliders-h"></i> Parameter Sweeps</a></li>
+                <li><a href="#" id="nav-projects"><i class="fas fa-save"></i> Projects</a></li>
+                <li><a href="#" id="nav-visualizations"><i class="fas fa-chart-line"></i> Visualizations</a></li>
             </ul>
         </nav>
     </header>
@@ -48,7 +50,14 @@
                     </div>
                     <button id="dashboard-view-results" class="secondary-button">View All Results</button>
                 </div>
-                <div class="dashboard-card">
+                <div class="dashboard-card" id="dashboard-active-project-card"> <!-- Added ID -->
+                    <h3>Active Project Details</h3>
+                    <div id="dashboard-active-project">
+                        <p>No active project. Create or activate one from the Projects panel.</p>
+                        <!-- Details will be populated here -->
+                    </div>
+                </div>
+                <div class="dashboard-card"> <!-- Moved About section -->
                     <h3>About QGW Detector</h3>
                     <p>The Quantum Gravitational Wave Detector simulates how gravitational waves affect entangled quantum systems. The project demonstrates a novel approach to gravitational wave detection by modeling phase shifts in entangled qubits caused by spacetime distortions.</p>
                 </div>
@@ -237,6 +246,57 @@
                 <!-- Sweep results will be displayed here -->
             </div>
         </section>
+
+        <!-- Projects Section -->
+        <section id="projects-panel" class="panel">
+            <h2>Project Workspace</h2>
+
+            <div id="active-project-display" class="active-project-banner">
+                Active Project: None (Unsaved)
+            </div>
+
+            <div class="card">
+                <h3>Create New Project</h3>
+                <p>Create a new workspace based on the current configuration.</p>
+                <div class="form-group">
+                    <label for="project-name">New Project Name:</label>
+                    <input type="text" id="project-name" placeholder="Enter a name for the new project">
+                </div>
+                <button id="create-project-button" class="primary-button">Create Project</button>
+            </div>
+
+            <div class="card">
+                 <!-- Removed Manage Projects section -->
+                 <h4>Existing Projects</h4>
+                 <div id="projects-list-container"> <!-- Renamed ID -->
+                     <p>Loading projects...</p>
+                 </div>
+            </div>
+        </section>
+
+        <!-- Visualizations Section -->
+        <section id="visualizations-panel" class="panel">
+            <h2>Visualizations</h2>
+            
+            <div class="project-selector">
+                <h3>Select Project</h3>
+                <div class="form-group">
+                    <label for="visualization-project-select">Project:</label>
+                    <select id="visualization-project-select"></select>
+                </div>
+                <div class="form-group">
+                    <label for="visualization-run-select">Run:</label>
+                    <select id="visualization-run-select">
+                        <option disabled selected>Select a project first</option>
+                    </select>
+                </div>
+                <!-- Removed Load Visualization button as selection triggers load -->
+            </div>
+
+            <div id="visualization-container" class="visualization-container">
+                <p>Select a project to view its visualizations.</p>
+            </div>
+        </section>
     </main>
 
     <footer>
@@ -255,7 +315,8 @@
     <script src="js/pipelines.js"></script>
     <script src="js/results.js"></script>
     <script src="js/sweeps.js"></script>
-    <script src="js/visualizations.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/visualizations.js"></script> <!-- Load Visualizations before Projects -->
+    <script src="js/projects.js"></script> <!-- Load Projects before App -->
+    <script src="js/app.js"></script> <!-- App should be last -->
 </body>
 </html>

@@ -42,8 +42,12 @@ const SweepsModule = (() => {
         }
         
         UI.showLoading('Running qubit count sweep...');
+
+        // Get active project ID
+        const activeProjectId = (typeof ProjectsModule !== 'undefined') ? ProjectsModule.getActiveProjectId() : null;
+        console.log("Running qubit sweep for active project:", activeProjectId);
         
-        const response = await API.sweepQubitCount(topology, qubitCounts);
+        const response = await API.sweepQubitCount(topology, qubitCounts, { activeProjectId: activeProjectId });
         
         UI.hideLoading();
         
@@ -73,8 +77,12 @@ const SweepsModule = (() => {
         }
         
         UI.showLoading('Running topology sweep...');
+
+        // Get active project ID
+        const activeProjectId = (typeof ProjectsModule !== 'undefined') ? ProjectsModule.getActiveProjectId() : null;
+        console.log("Running topology sweep for active project:", activeProjectId);
         
-        const response = await API.sweepTopology(qubitCount, topologies);
+        const response = await API.sweepTopology(qubitCount, topologies, { activeProjectId: activeProjectId });
         
         UI.hideLoading();
         
@@ -128,8 +136,12 @@ const SweepsModule = (() => {
         }
         
         UI.showLoading('Running scale factor sweep...');
+
+         // Get active project ID
+        const activeProjectId = (typeof ProjectsModule !== 'undefined') ? ProjectsModule.getActiveProjectId() : null;
+        console.log("Running scale factor sweep for active project:", activeProjectId);
         
-        const response = await API.sweepScaleFactor(pipelineConfig, scaleFactors);
+        const response = await API.sweepScaleFactor(pipelineConfig, scaleFactors, { activeProjectId: activeProjectId });
         
         UI.hideLoading();
         

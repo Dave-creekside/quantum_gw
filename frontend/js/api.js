@@ -77,12 +77,14 @@ const API = (() => {
 
     // Pipeline Execution Endpoints
     const runPipeline = (stages, options = {}) => {
-        const config = {
+        const payload = {
             stages,
             save_results: options.saveResults !== false,
-            save_visualization: options.saveVisualization !== false
+            save_visualization: options.saveVisualization !== false,
+            active_project_id: options.activeProjectId || null // Include active project ID if provided
         };
-        return post('/run', config);
+        console.log("Running pipeline with payload:", payload);
+        return post('/run', payload);
     };
 
     const comparePipelines = (pipelineConfigs, names) => {
@@ -96,28 +98,37 @@ const API = (() => {
     const getEvents = () => get('/events');
 
     // Parameter Sweep Endpoints
-    const sweepQubitCount = (topology, qubitCounts, baseConfigParams = null) => {
-        return post('/sweep/qubit_count', {
+    const sweepQubitCount = (topology, qubitCounts, options = {}) => {
+        const payload = {
             topology,
             qubit_counts: qubitCounts,
-            base_config_params: baseConfigParams
-        });
+            base_config_params: options.baseConfigParams || null,
+            active_project_id: options.activeProjectId || null // Add project ID
+        };
+        console.log("Running qubit sweep with payload:", payload);
+        return post('/sweep/qubit_count', payload);
     };
 
-    const sweepTopology = (qubitCount, topologies, baseConfigParams = null) => {
-        return post('/sweep/topology', {
+    const sweepTopology = (qubitCount, topologies, options = {}) => {
+         const payload = {
             qubit_count: qubitCount,
             topologies,
-            base_config_params: baseConfigParams
-        });
+            base_config_params: options.baseConfigParams || null,
+            active_project_id: options.activeProjectId || null // Add project ID
+        };
+        console.log("Running topology sweep with payload:", payload);
+        return post('/sweep/topology', payload);
     };
 
-    const sweepScaleFactor = (pipelineConfig, scaleFactors, baseConfigParams = null) => {
-        return post('/sweep/scale_factor', {
+    const sweepScaleFactor = (pipelineConfig, scaleFactors, options = {}) => {
+         const payload = {
             pipeline_config: pipelineConfig,
             scale_factors: scaleFactors,
-            base_config_params: baseConfigParams
-        });
+            base_config_params: options.baseConfigParams || null,
+            active_project_id: options.activeProjectId || null // Add project ID
+        };
+        console.log("Running scale factor sweep with payload:", payload);
+        return post('/sweep/scale_factor', payload);
     };
 
     // Advanced Tool Endpoints
@@ -149,6 +160,36 @@ const API = (() => {
         });
     };
 
+    // Project Management Endpoints
+    const createProject = (name, baseConfiguration) => {
+        console.log('Creating project:', name, baseConfiguration);
+        return post('/projects', {
+            name: name,
+            base_configuration: baseConfiguration
+        });
+    };
+
+    const listProjects = async () => {
+        console.log('Fetching projects list...');
+        const response = await get('/projects');
+        console.log('Projects API response:', response);
+        return response;
+    };
+
+    const loadProject = async (projectId) => {
+        console.log('Loading project:', projectId);
+        const response = await get(`/projects/${projectId}`);
+        console.log('Project load response:', response);
+        return response;
+    };
+
+    const getProjectRuns = async (projectId) => {
+        console.log('Fetching runs for project:', projectId);
+        const response = await get(`/projects/${projectId}/runs`);
+        console.log('Project runs response:', response);
+        return response;
+    };
+    
     // Return the public API
     return {
         // Basic config management
@@ -166,6 +207,12 @@ const API = (() => {
         // Pipeline execution
         runPipeline,
         comparePipelines,
+        
+        // Project management
+        createProject,
+        listProjects,
+        loadProject,
+        getProjectRuns,
         
         // Events
         getEvents,

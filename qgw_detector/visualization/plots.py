@@ -1,7 +1,9 @@
 # qgw_detector/visualization/plots.py
 import numpy as np
+import matplotlib
+matplotlib.use('Agg') # Use non-interactive backend BEFORE importing pyplot
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
+import numpy as np
 import os
 from datetime import datetime
 

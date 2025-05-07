@@ -1,4 +1,4 @@
-# qgw_detector/web_api.py
+ # qgw_detector/web_api.py
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -37,11 +37,16 @@ class ConfigUpdate(BaseModel):
     use_gpu: Optional[bool] = None
     use_zx_opt: Optional[bool] = None
     zx_opt_level: Optional[int] = None
+    
+class ProjectData(BaseModel):
+    name: str
+    configuration: Dict[str, Any]
 
-class PipelineConfig(BaseModel):
+class PipelineRunRequest(BaseModel):
     stages: List[Tuple[int, str]]
     save_results: bool = True
     save_visualization: bool = True
+    active_project_id: Optional[str] = None # Add active project ID
 
 class ComparisonRequest(BaseModel):
     pipeline_configs: List[List[Tuple[int, str]]]
@@ -55,16 +60,19 @@ class SweepQubitRequest(BaseModel):
     topology: str
     qubit_counts: List[int]
     base_config_params: Optional[Dict[str, Any]] = None
+    active_project_id: Optional[str] = None # Add project ID
 
 class SweepTopologyRequest(BaseModel):
     qubit_count: int
     topologies: List[str]
     base_config_params: Optional[Dict[str, Any]] = None
+    active_project_id: Optional[str] = None # Add project ID
 
 class SweepScaleFactorRequest(BaseModel):
     pipeline_config: List[Tuple[int, str]]
     scale_factors: List[float]
     base_config_params: Optional[Dict[str, Any]] = None
+    active_project_id: Optional[str] = None # Add project ID
 
 # --- Advanced Tools Models (Placeholders) ---
 class AnalyzeStateRequest(BaseModel):
@@ -89,14 +97,31 @@ class ZXOptimizeDetailsRequest(BaseModel):
 # --- End Advanced Tools Models ---
 
 
+# Mount static directories
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+print(f"Base directory: {base_dir}")
+
 # Mount frontend static files
-frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+frontend_dir = os.path.join(base_dir, "frontend")
 if os.path.exists(frontend_dir):
+    print(f"Mounting frontend directory: {frontend_dir}")
     app.mount("/frontend", StaticFiles(directory=frontend_dir), name="frontend")
-    # Mount data directory for visualizations
-    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-    if os.path.exists(data_dir):
-        app.mount("/data", StaticFiles(directory=data_dir), name="data")
+
+# Mount data directory for visualizations and results
+data_dir = os.path.join(base_dir, "data")
+if not os.path.exists(data_dir):
+    os.makedirs(data_dir, exist_ok=True)
+    print(f"Created data directory: {data_dir}")
+
+# Create subdirectories in data if they don't exist
+projects_dir = os.path.join(data_dir, "projects")
+experiments_dir = os.path.join(data_dir, "experiments")
+os.makedirs(projects_dir, exist_ok=True)
+os.makedirs(experiments_dir, exist_ok=True)
+
+# Mount data directory
+print(f"Mounting data directory: {data_dir}")
+app.mount("/data", StaticFiles(directory=data_dir), name="data")
 
 # Define routes
 @app.get("/")
@@ -153,20 +178,71 @@ def get_saved_result(result_identifier: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/projects")
+def list_projects():
+    """List all saved projects"""
+    try:
+        return api.list_projects()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class CreateProjectRequest(BaseModel):
+    name: str
+    base_configuration: Dict[str, Any]
+
+@app.post("/projects")
+def create_project(request: CreateProjectRequest):
+    """Create a new project workspace"""
+    try:
+        # The base_configuration should contain event_name, parameters, pipeline_config
+        return api.create_project(
+            name=request.name,
+            base_configuration=request.base_configuration
+        )
+    except Exception as e:
+        print(f"Error in /projects POST endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/projects/{project_id}")
+def get_project(project_id: str):
+    """Get a specific project by ID"""
+    try:
+        return api.load_project(project_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Project with ID {project_id} not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/projects/{project_id}/runs")
+def get_project_runs(project_id: str):
+    """Get details of runs associated with a specific project"""
+    try:
+        # We need a new method in the API class for this
+        # Let's assume it's called get_project_run_details
+        return api.get_project_run_details(project_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Project with ID {project_id} not found")
+    except Exception as e:
+        print(f"Error getting runs for project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/events")
 def get_events():
     return api.get_available_events()
 
 @app.post("/run")
-def run_pipeline(config: PipelineConfig):
+def run_pipeline(request: PipelineRunRequest):
+    """Run a pipeline, optionally associating it with a project."""
     try:
         result = api.run_pipeline(
-            pipeline_config=config.stages,
-            save_results=config.save_results,
-            save_visualization=config.save_visualization
+            pipeline_config=request.stages,
+            save_results=request.save_results,
+            save_visualization=request.save_visualization,
+            active_project_id=request.active_project_id # Pass the project ID
         )
         return result
     except Exception as e:
+        print(f"Error in /run endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/compare")
@@ -182,38 +258,47 @@ def compare_pipelines(request: ComparisonRequest):
 
 @app.post("/sweep/qubit_count")
 def sweep_qubit_count(request: SweepQubitRequest):
+    """Perform a qubit count sweep, optionally associating runs with a project."""
     try:
         results = api.sweep_qubit_count(
             topology=request.topology,
             qubit_counts=request.qubit_counts,
-            base_config_params=request.base_config_params
+            base_config_params=request.base_config_params,
+            active_project_id=request.active_project_id # Pass project ID
         )
         return results
     except Exception as e:
+        print(f"Error in /sweep/qubit_count endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/sweep/topology")
 def sweep_topology(request: SweepTopologyRequest):
+    """Perform a topology sweep, optionally associating runs with a project."""
     try:
         results = api.sweep_topology(
             qubit_count=request.qubit_count,
             topologies=request.topologies,
-            base_config_params=request.base_config_params
+            base_config_params=request.base_config_params,
+            active_project_id=request.active_project_id # Pass project ID
         )
         return results
     except Exception as e:
+        print(f"Error in /sweep/topology endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/sweep/scale_factor")
 def sweep_scale_factor(request: SweepScaleFactorRequest):
+    """Perform a scale factor sweep, optionally associating runs with a project."""
     try:
         results = api.sweep_scale_factor(
             pipeline_config=request.pipeline_config,
             scale_factors=request.scale_factors,
-            base_config_params=request.base_config_params
+            base_config_params=request.base_config_params,
+            active_project_id=request.active_project_id # Pass project ID
         )
         return results
     except Exception as e:
+        print(f"Error in /sweep/scale_factor endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # --- Advanced Tools Endpoints (Placeholders) ---

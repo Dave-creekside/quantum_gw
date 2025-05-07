@@ -183,6 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
         VisualizationsModule.init();
     }
     
+    if (typeof ProjectsModule !== 'undefined') {
+        ProjectsModule.init();
+    }
+    
     // Load dashboard data if we're starting on the dashboard
     const dashboardRecentResults = document.getElementById('dashboard-recent-results');
     if (dashboardRecentResults && typeof ResultsModule !== 'undefined') {

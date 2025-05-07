@@ -16,6 +16,7 @@ const PipelinesModule = (() => {
     // State
     let presets = {};
     let customStageCount = 0;
+    let currentCustomPipeline = []; // Add state for the custom pipeline
     
     /**
      * Load available presets
@@ -88,14 +89,23 @@ const PipelinesModule = (() => {
             return;
         }
         
-        UI.showLoading('Running pipeline...');
+        UI.showLoading('Running preset pipeline...');
         
-        const response = await API.runPipeline(config);
+        // Get active project ID
+        const activeProjectId = (typeof ProjectsModule !== 'undefined') ? ProjectsModule.getActiveProjectId() : null;
+        console.log("Running preset pipeline for active project:", activeProjectId);
+
+        const response = await API.runPipeline(config, { activeProjectId: activeProjectId });
         
         UI.hideLoading();
         
         if (response.success) {
             displayPipelineResults(response.data, selectedPreset);
+            // Update dashboard if a project is active
+            if (activeProjectId && typeof ProjectsModule !== 'undefined' && ProjectsModule.updateDashboardProjectInfo) {
+                 console.log("Pipeline run successful, updating dashboard project info...");
+                 ProjectsModule.updateDashboardProjectInfo();
+            }
         } else {
             alert(`Error running pipeline: ${response.error}`);
         }
@@ -139,10 +149,30 @@ const PipelinesModule = (() => {
             removeCustomStage(stageToRemove);
         });
         
+        // Update internal state
+        updateInternalCustomPipeline();
+
         // Update button state
         updateCustomPipelineButtonState();
     };
     
+     /**
+      * Updates the internal `currentCustomPipeline` state based on the DOM.
+      */
+     const updateInternalCustomPipeline = () => {
+         if (!pipelineStagesContainer) {
+             currentCustomPipeline = [];
+             return;
+         }
+         const stages = pipelineStagesContainer.querySelectorAll('.pipeline-stage');
+         currentCustomPipeline = Array.from(stages).map(stage => {
+             const qubits = parseInt(stage.querySelector('.qubit-select').value);
+             const topology = stage.querySelector('.topology-select').value;
+             return [qubits, topology];
+         });
+         console.log("Internal custom pipeline state updated:", currentCustomPipeline);
+     };
+
     /**
      * Remove a stage from the custom pipeline
      */
@@ -164,6 +194,9 @@ const PipelinesModule = (() => {
             
             customStageCount = remainingStages.length;
             
+            // Update internal state
+            updateInternalCustomPipeline();
+
             // Update button state
             updateCustomPipelineButtonState();
         }
@@ -200,13 +233,22 @@ const PipelinesModule = (() => {
         });
         
         UI.showLoading('Running custom pipeline...');
+
+        // Get active project ID
+        const activeProjectId = (typeof ProjectsModule !== 'undefined') ? ProjectsModule.getActiveProjectId() : null;
+        console.log("Running custom pipeline for active project:", activeProjectId);
         
-        const response = await API.runPipeline(config);
+        const response = await API.runPipeline(config, { activeProjectId: activeProjectId });
         
         UI.hideLoading();
         
         if (response.success) {
             displayPipelineResults(response.data, 'Custom Pipeline');
+             // Update dashboard if a project is active
+             if (activeProjectId && typeof ProjectsModule !== 'undefined' && ProjectsModule.updateDashboardProjectInfo) {
+                 console.log("Pipeline run successful, updating dashboard project info...");
+                 ProjectsModule.updateDashboardProjectInfo();
+             }
         } else {
             alert(`Error running pipeline: ${response.error}`);
         }
@@ -286,7 +328,8 @@ const PipelinesModule = (() => {
             ${results.file_paths && results.file_paths.visualization ? `
                 <div class="result-visualization">
                     <h4>Visualization</h4>
-                    <img src="${results.file_paths.visualization}" alt="Pipeline Visualization">
+                    <img src="${VisualizationsModule.formatVisualizationPath(results.file_paths.visualization)}" alt="Pipeline Visualization"
+                         onerror="this.onerror=null; this.src=''; this.alt='Failed to load image'; this.style.display='none'; this.parentNode.innerHTML += '<p class=\\'error\\'>Failed to load visualization image.</p>';">
                 </div>
             ` : ''}
         `;
@@ -320,9 +363,77 @@ const PipelinesModule = (() => {
             updateCustomPipelineButtonState();
         }
         
-        // Add one stage by default for custom pipeline
-        if (pipelineStagesContainer && pipelineStagesContainer.children.length === 0) {
-            addCustomStage();
+        // Restore or initialize custom pipeline state
+        if (currentCustomPipeline.length > 0) {
+             // If state exists (e.g., from previous interaction), restore it
+             setCustomPipeline(currentCustomPipeline);
+        } else if (pipelineStagesContainer && pipelineStagesContainer.children.length === 0) {
+             // Otherwise, add one stage by default only if the container is empty
+             addCustomStage(); // This will also call updateInternalCustomPipeline
+        } else {
+             // If container has stages but state is empty, sync state from DOM
+             updateInternalCustomPipeline();
+        }
+        updateCustomPipelineButtonState(); // Ensure button state is correct on init
+    };
+    
+    /**
+     * Set custom pipeline configuration
+     * This is used when loading a project
+     */
+    const setCustomPipeline = (pipelineConfig) => {
+        if (!pipelineStagesContainer) return;
+        
+        // Clear existing stages
+        pipelineStagesContainer.innerHTML = '';
+        customStageCount = 0;
+        
+        // Add each stage from the configuration
+        for (const [qubits, topology] of pipelineConfig) {
+            customStageCount++;
+            
+            const stageEl = document.createElement('div');
+            stageEl.className = 'pipeline-stage';
+            stageEl.dataset.stageIndex = customStageCount;
+            
+            stageEl.innerHTML = `
+                <span>Stage ${customStageCount}:</span>
+                <select class="qubit-select">
+                    <option value="4" ${qubits === 4 ? 'selected' : ''}>4 qubits</option>
+                    <option value="6" ${qubits === 6 ? 'selected' : ''}>6 qubits</option>
+                    <option value="8" ${qubits === 8 ? 'selected' : ''}>8 qubits</option>
+                </select>
+                <select class="topology-select">
+                    <option value="star" ${topology === 'star' ? 'selected' : ''}>star</option>
+                    <option value="linear" ${topology === 'linear' ? 'selected' : ''}>linear</option>
+                    <option value="full" ${topology === 'full' ? 'selected' : ''}>full</option>
+                </select>
+                <button class="remove-stage" data-stage="${customStageCount}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            
+            pipelineStagesContainer.appendChild(stageEl);
+            
+            // Add event listener to remove button
+            const removeButton = stageEl.querySelector('.remove-stage');
+            removeButton.addEventListener('click', (e) => {
+                const stageToRemove = e.currentTarget.dataset.stage;
+                removeCustomStage(stageToRemove);
+            });
+        }
+        
+        // Update button state
+        updateCustomPipelineButtonState();
+        
+        // Update internal state as well
+        currentCustomPipeline = [...pipelineConfig];
+        console.log("Internal custom pipeline state set by project load:", currentCustomPipeline);
+
+        // Switch to custom pipeline tab if it exists
+        const customPipelineTab = document.querySelector('.tab-btn[data-tab="custom"]');
+        if (customPipelineTab) {
+            UI.switchTab(customPipelineTab);
         }
     };
     
@@ -331,7 +442,8 @@ const PipelinesModule = (() => {
         init,
         loadPresets,
         runPresetPipeline,
-        runCustomPipeline
+        runCustomPipeline,
+        setCustomPipeline
     };
 })();
 
