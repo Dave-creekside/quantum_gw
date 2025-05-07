@@ -1,8 +1,12 @@
 # qgw_detector/web_api.py
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Tuple, Optional, Dict, Any, Union
 import uvicorn
+import os
 
 from qgw_detector.api import QuantumGWAPI
 
@@ -11,6 +15,15 @@ app = FastAPI(
     title="Quantum Gravitational Wave Detector API",
     description="API for Quantum Gravitational Wave Detection experiments",
     version="1.0.0"
+)
+
+# Add CORS middleware to allow frontend to access the API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # For development; restrict for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Create API instance
@@ -76,10 +89,31 @@ class ZXOptimizeDetailsRequest(BaseModel):
 # --- End Advanced Tools Models ---
 
 
+# Mount frontend static files
+frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+if os.path.exists(frontend_dir):
+    app.mount("/frontend", StaticFiles(directory=frontend_dir), name="frontend")
+    # Mount data directory for visualizations
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+    if os.path.exists(data_dir):
+        app.mount("/data", StaticFiles(directory=data_dir), name="data")
+
 # Define routes
 @app.get("/")
 def read_root():
+    """Redirect to the frontend if it exists, otherwise show API info"""
+    if os.path.exists(os.path.join(frontend_dir, "index.html")):
+        return RedirectResponse(url="/frontend/index.html")
     return {"message": "Quantum Gravitational Wave Detector API"}
+
+@app.get("/api")
+def api_info():
+    """API information endpoint"""
+    return {
+        "title": "Quantum Gravitational Wave Detector API",
+        "version": "1.0.0", 
+        "description": "API for Quantum Gravitational Wave Detection experiments"
+    }
 
 @app.get("/config")
 def get_config():
