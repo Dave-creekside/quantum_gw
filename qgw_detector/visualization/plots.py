@@ -470,5 +470,122 @@ def test_visualizer():
     print("All plots were saved to the 'data/visualization' directory.")
     return visualizer
 
+# Utility functions for API integration
+def create_pipeline_visualization(pipeline_results, output_path):
+    """
+    Create a visualization of a pipeline's results
+    
+    Args:
+        pipeline_results: Dictionary containing pipeline results from the API
+        output_path: Path to save the visualization
+    """
+    # Create figure with enough subplots for each stage + LIGO data
+    n_stages = len(pipeline_results['stages'])
+    fig, axes = plt.subplots(n_stages + 1, 1, figsize=(12, 4 * (n_stages + 1)))
+    
+    # Extract event name
+    event_name = pipeline_results.get('event_name', 'Unknown Event')
+    
+    # Plot LIGO strain data (if available)
+    if 'stages' in pipeline_results and len(pipeline_results['stages']) > 0:
+        # Get time points from the first stage
+        first_stage = pipeline_results['stages'][0]
+        if 'times' in first_stage:
+            times = first_stage['times']
+            strain = np.zeros_like(times)  # We don't have raw strain here, dummy array
+            
+            axes[0].plot(times, strain, 'b')
+            axes[0].set_title(f"LIGO Data: {event_name}")
+            axes[0].set_ylabel("Strain")
+            axes[0].grid(True)
+    
+    # Plot each stage
+    for i, stage in enumerate(pipeline_results['stages']):
+        ax = axes[i + 1]
+        
+        # Get stage information
+        stage_num = stage['stage']
+        qubits = stage['qubits']
+        topology = stage['topology']
+        
+        # Get data if available
+        if 'times' in stage and 'detection_metric' in stage:
+            times = stage['times']
+            metric = stage['detection_metric']
+            
+            # Plot detection metric
+            ax.plot(times, metric, 'g')
+            
+            # Add SNR information
+            if 'qfi_snr' in stage:
+                snr = stage['qfi_snr']
+                ax.text(0.02, 0.95, f"QFI SNR: {snr:.4f}", transform=ax.transAxes,
+                       verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+        
+        ax.set_title(f"Stage {stage_num}: {qubits}-qubit {topology}")
+        ax.set_ylabel("Detection Metric")
+        ax.grid(True)
+        
+        # Add x-label to bottom subplot
+        if i == n_stages - 1:
+            ax.set_xlabel("Time (s)")
+    
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return True
+
+def create_comparison_visualization(comparison_result, output_path):
+    """
+    Create a visualization comparing multiple pipeline configurations
+    
+    Args:
+        comparison_result: Dictionary containing comparison results from the API
+        output_path: Path to save the visualization
+    """
+    # Extract pipeline names and metrics
+    pipeline_names = []
+    snr_values = []
+    improvement_values = []
+    
+    for pipeline in comparison_result['pipelines']:
+        pipeline_names.append(pipeline['name'])
+        snr_values.append(pipeline['final_snr'])
+        improvement_values.append(pipeline['improvement'])
+    
+    # Sort by SNR (largest first)
+    sorted_indices = np.argsort(snr_values)[::-1]
+    pipeline_names = [pipeline_names[i] for i in sorted_indices]
+    snr_values = [snr_values[i] for i in sorted_indices]
+    improvement_values = [improvement_values[i] for i in sorted_indices]
+    
+    # Create figure
+    plt.figure(figsize=(12, 8))
+    
+    # Plot SNR comparison
+    plt.subplot(1, 2, 1)
+    plt.barh(pipeline_names, snr_values, color='skyblue')
+    plt.xlabel('Final SNR')
+    plt.title('Signal-to-Noise Ratio Comparison')
+    plt.grid(True, axis='x')
+    
+    # Plot improvement comparison
+    plt.subplot(1, 2, 2)
+    plt.barh(pipeline_names, improvement_values, color='lightgreen')
+    plt.xlabel('Improvement Factor')
+    plt.title('Improvement Factor Comparison')
+    plt.grid(True, axis='x')
+    
+    # Add overall title
+    plt.suptitle(f"Pipeline Comparison: {comparison_result.get('event_name', 'Unknown Event')}", 
+               fontsize=16, y=0.98)
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # Adjust for suptitle
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return True
+
 if __name__ == "__main__":
     test_visualizer()

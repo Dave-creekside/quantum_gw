@@ -8,12 +8,10 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import time
 from tabulate import tabulate
-import importlib.util
+import subprocess
 
-# Import our modules
-from qgw_detector.data.ligo import fetch_gw_data, preprocess_gw_data
-from qgw_detector.quantum.circuits import QuantumGWDetector
-from qgw_detector.visualization.plots import GWDetectionVisualizer
+# Import our API
+from qgw_detector.api import QuantumGWAPI
 
 # Try to import PyZX if available
 try:
@@ -27,42 +25,11 @@ class QuantumGWMenu:
     
     def __init__(self):
         """Initialize the menu system"""
-        self.event_name = "GW150914"
-        self.downsample_factor = 200
-        self.scale_factor = 1e21
-        self.use_gpu = True
-        self.use_zx_opt = False
-        self.zx_opt_level = 1
+        # Create an instance of the API
+        self.api = QuantumGWAPI()
         
-        self.data = None
-        self.results_cache = {}
+        # Store current result for certain operations
         self.current_result = None
-        
-        # Create directories if needed
-        os.makedirs("data/experiments", exist_ok=True)
-        os.makedirs("data/visualization", exist_ok=True)
-        
-        # Define preset pipeline configurations
-        self.preset_pipelines = {
-            "best_3stage": [
-                (4, "linear"), (4, "full"), (4, "linear")
-            ],
-            "best_2stage": [
-                (4, "linear"), (4, "linear")
-            ],
-            "star_full_linear": [
-                (4, "star"), (4, "full"), (4, "linear")
-            ],
-            "full_star": [
-                (6, "full"), (6, "star")
-            ],
-            "star_linear": [
-                (4, "star"), (4, "linear")
-            ],
-            "8qubit_pipeline": [
-                (8, "star"), (6, "full"), (8, "linear")
-            ]
-        }
     
     def main_menu(self):
         """Display the main menu"""
@@ -72,14 +39,17 @@ class QuantumGWMenu:
             print("  QUANTUM GRAVITATIONAL WAVE DETECTOR - EXPERIMENTAL WORKBENCH")
             print("=" * 72)
             
+            # Get current config from API
+            config = self.api.get_config()
+            
             print("\nCurrent Settings:")
-            print(f"  Event: {self.event_name}")
-            print(f"  Downsample factor: {self.downsample_factor}")
-            print(f"  Scale factor: {self.scale_factor:.2e}")
-            print(f"  GPU acceleration: {self.use_gpu}")
-            print(f"  ZX-calculus optimization: {self.use_zx_opt}")
-            if self.use_zx_opt:
-                print(f"  ZX optimization level: {self.zx_opt_level}")
+            print(f"  Event: {config['event_name']}")
+            print(f"  Downsample factor: {config['downsample_factor']}")
+            print(f"  Scale factor: {config['scale_factor']:.2e}")
+            print(f"  GPU acceleration: {config['use_gpu']}")
+            print(f"  ZX-calculus optimization: {config['use_zx_opt']}")
+            if config['use_zx_opt']:
+                print(f"  ZX optimization level: {config['zx_opt_level']}")
             
             print("\nMain Menu:")
             print("  1. Run Preset Pipeline")
@@ -120,28 +90,31 @@ class QuantumGWMenu:
         print("  RUN PRESET PIPELINE")
         print("=" * 72)
         
+        # Get presets from the API
+        presets = self.api.list_presets()
+        
         print("\nAvailable Preset Pipelines:")
-        for i, (name, config) in enumerate(self.preset_pipelines.items(), 1):
+        for i, (name, config) in enumerate(presets.items(), 1):
             pipeline_str = " → ".join([f"{q}-{t}" for q, t in config])
             print(f"  {i}. {name}: {pipeline_str}")
         
         print("\n  0. Return to Main Menu")
         
-        choice = input("\nEnter your choice (0-{}): ".format(len(self.preset_pipelines)))
+        choice = input("\nEnter your choice (0-{}): ".format(len(presets)))
         
         if choice == '0':
             return
         
         try:
             idx = int(choice) - 1
-            if 0 <= idx < len(self.preset_pipelines):
-                name = list(self.preset_pipelines.keys())[idx]
-                config = self.preset_pipelines[name]
+            if 0 <= idx < len(presets):
+                name = list(presets.keys())[idx]
+                config = presets[name]
                 
                 print(f"\nRunning preset pipeline: {name}")
-                self._ensure_data_loaded()
                 
-                self.current_result = self._run_pipeline(config)
+                # Use the API to run the pipeline
+                self.current_result = self.api.run_pipeline(config)
                 self._view_pipeline_result(self.current_result)
                 
                 input("\nPress Enter to continue...")
@@ -215,18 +188,22 @@ class QuantumGWMenu:
         
         # Run the custom pipeline
         print(f"\nRunning custom pipeline with {len(pipeline)} stages...")
-        self._ensure_data_loaded()
         
-        self.current_result = self._run_pipeline(pipeline)
+        # Use the API to run the pipeline
+        self.current_result = self.api.run_pipeline(pipeline)
         self._view_pipeline_result(self.current_result)
         
         # Ask if user wants to save this as a preset
         save_preset = input("\nSave this pipeline as a preset? (y/n): ")
         if save_preset.lower() == 'y':
             preset_name = input("Enter a name for this preset: ")
-            if preset_name and preset_name not in self.preset_pipelines:
-                self.preset_pipelines[preset_name] = pipeline
-                print(f"Preset '{preset_name}' saved!")
+            try:
+                if preset_name:
+                    # Use the API to add a preset
+                    result = self.api.add_preset(preset_name, pipeline)
+                    print(f"Preset '{preset_name}' saved!")
+            except ValueError as e:
+                print(f"Error: {e}")
         
         input("\nPress Enter to continue...")
     
@@ -237,12 +214,17 @@ class QuantumGWMenu:
         print("  COMPARE MULTIPLE PIPELINES")
         print("=" * 72)
         
+        # Get presets from the API
+        presets = self.api.list_presets()
+        
         # Select pipelines to compare
         pipelines_to_compare = []
+        pipelines_configs = []
+        pipelines_names = []
         
         print("\nSelect pipelines to compare (max 5):")
         print("  Available preset pipelines:")
-        for i, (name, config) in enumerate(self.preset_pipelines.items(), 1):
+        for i, (name, config) in enumerate(presets.items(), 1):
             pipeline_str = " → ".join([f"{q}-{t}" for q, t in config])
             print(f"  {i}. {name}: {pipeline_str}")
         
@@ -333,20 +315,20 @@ class QuantumGWMenu:
             input("No pipelines selected. Press Enter to continue...")
             return
         
-        # Run all selected pipelines
-        print("\nRunning comparison of selected pipelines...")
-        self._ensure_data_loaded()
-        
-        comparison_results = []
-        
-        for pipeline in pipelines_to_compare:
-            print(f"\nRunning pipeline: {pipeline['name']}")
-            result = self._run_pipeline(pipeline['config'])
-            result['name'] = pipeline['name']
-            comparison_results.append(result)
-        
-        # Display comparison
-        self._compare_pipeline_results(comparison_results)
+        # Run comparison
+        if pipelines_to_compare:
+            print("\nRunning comparison of selected pipelines...")
+            
+            # Extract configs and names for API call
+            for pipeline in pipelines_to_compare:
+                pipelines_configs.append(pipeline['config'])
+                pipelines_names.append(pipeline['name'])
+            
+            # Use the API to run the comparison
+            comparison_result = self.api.compare_pipelines(pipelines_configs, pipelines_names)
+            
+            # Display comparison
+            self._display_comparison_results(comparison_result)
         
         input("\nPress Enter to continue...")
     
@@ -383,12 +365,8 @@ class QuantumGWMenu:
         print("  VIEW PREVIOUS RESULTS")
         print("=" * 72)
         
-        # Find all result files
-        result_files = []
-        for root, _, files in os.walk("data/experiments"):
-            for file in files:
-                if file.endswith(".json"):
-                    result_files.append(os.path.join(root, file))
+        # Use the API to list saved results
+        result_files = self.api.list_saved_results()
         
         if not result_files:
             input("\nNo saved results found. Press Enter to continue...")
@@ -396,10 +374,11 @@ class QuantumGWMenu:
         
         # Display available results
         print("\nAvailable results:")
-        for i, file_path in enumerate(result_files, 1):
-            # Extract the filename without path and extension
-            filename = os.path.basename(file_path)
-            print(f"  {i}. {filename}")
+        for i, result_info in enumerate(result_files, 1):
+            # Display result information
+            timestamp = result_info['timestamp']
+            pipeline_name = result_info['pipeline_name']
+            print(f"  {i}. [{timestamp}] {pipeline_name}")
         
         print("\n  0. Return to Main Menu")
         
@@ -411,11 +390,10 @@ class QuantumGWMenu:
         try:
             idx = int(choice) - 1
             if 0 <= idx < len(result_files):
-                file_path = result_files[idx]
+                result_info = result_files[idx]
                 
-                # Load the result file
-                with open(file_path, 'r') as f:
-                    result = json.load(f)
+                # Use the API to get the saved result
+                result = self.api.get_saved_result(result_info['identifier'])
                 
                 # Display the result
                 self._view_pipeline_result(result)
@@ -433,14 +411,17 @@ class QuantumGWMenu:
         print("  CHANGE SETTINGS")
         print("=" * 72)
         
+        # Get current config from API
+        config = self.api.get_config()
+        
         print("\nCurrent Settings:")
-        print(f"  1. Event: {self.event_name}")
-        print(f"  2. Downsample factor: {self.downsample_factor}")
-        print(f"  3. Scale factor: {self.scale_factor:.2e}")
-        print(f"  4. GPU acceleration: {self.use_gpu}")
-        print(f"  5. ZX-calculus optimization: {self.use_zx_opt}")
-        if self.use_zx_opt:
-            print(f"  6. ZX optimization level: {self.zx_opt_level}")
+        print(f"  1. Event: {config['event_name']}")
+        print(f"  2. Downsample factor: {config['downsample_factor']}")
+        print(f"  3. Scale factor: {config['scale_factor']:.2e}")
+        print(f"  4. GPU acceleration: {config['use_gpu']}")
+        print(f"  5. ZX-calculus optimization: {config['use_zx_opt']}")
+        if config['use_zx_opt']:
+            print(f"  6. ZX optimization level: {config['zx_opt_level']}")
         
         print("\n  0. Return to Main Menu")
         
@@ -462,10 +443,9 @@ class QuantumGWMenu:
             try:
                 idx = int(event_choice) - 1
                 if 0 <= idx < len(events):
-                    self.event_name = events[idx]
-                    # Clear data cache when event changes
-                    self.data = None
-                    print(f"\nEvent changed to: {self.event_name}")
+                    # Use the API to update the event
+                    self.api.set_config(event_name=events[idx])
+                    print(f"\nEvent changed to: {events[idx]}")
                 else:
                     print("\nInvalid selection!")
             except ValueError:
@@ -475,8 +455,9 @@ class QuantumGWMenu:
             try:
                 new_value = int(input("\nEnter new downsample factor (recommended: 100-500): "))
                 if new_value > 0:
-                    self.downsample_factor = new_value
-                    print(f"\nDownsample factor set to: {self.downsample_factor}")
+                    # Use the API to update the downsample factor
+                    self.api.set_config(downsample_factor=new_value)
+                    print(f"\nDownsample factor set to: {new_value}")
                 else:
                     print("\nValue must be positive!")
             except ValueError:
@@ -486,8 +467,9 @@ class QuantumGWMenu:
             try:
                 new_value = float(input("\nEnter new scale factor (scientific notation ok, e.g. 1e21): "))
                 if new_value > 0:
-                    self.scale_factor = new_value
-                    print(f"\nScale factor set to: {self.scale_factor:.2e}")
+                    # Use the API to update the scale factor
+                    self.api.set_config(scale_factor=new_value)
+                    print(f"\nScale factor set to: {new_value:.2e}")
                 else:
                     print("\nValue must be positive!")
             except ValueError:
@@ -495,20 +477,26 @@ class QuantumGWMenu:
         
         elif choice == '4':
             new_value = input("\nEnable GPU acceleration? (y/n): ").lower()
-            self.use_gpu = new_value == 'y'
-            print(f"\nGPU acceleration: {self.use_gpu}")
+            # Use the API to update the GPU setting
+            use_gpu = new_value == 'y'
+            self.api.set_config(use_gpu=use_gpu)
+            print(f"\nGPU acceleration: {use_gpu}")
         
         elif choice == '5':
             new_value = input("\nEnable ZX-calculus optimization? (y/n): ").lower()
-            self.use_zx_opt = new_value == 'y'
-            print(f"\nZX-calculus optimization: {self.use_zx_opt}")
+            # Use the API to update the ZX optimization setting
+            use_zx_opt = new_value == 'y'
+            self.api.set_config(use_zx_opt=use_zx_opt)
+            print(f"\nZX-calculus optimization: {use_zx_opt}")
             
-            if self.use_zx_opt and not PYZX_AVAILABLE:
+            if use_zx_opt and not PYZX_AVAILABLE:
                 print("\nWarning: PyZX not found! Please install with 'pip install pyzx'")
-                self.use_zx_opt = False
+                self.api.set_config(use_zx_opt=False)
         
         elif choice == '6':
-            if not self.use_zx_opt:
+            # Get updated config to check if ZX is enabled
+            config = self.api.get_config()
+            if not config['use_zx_opt']:
                 print("\nZX-calculus optimization is disabled!")
             else:
                 try:
@@ -519,8 +507,9 @@ class QuantumGWMenu:
                     
                     new_value = int(input("\nEnter ZX optimization level (1-3): "))
                     if 1 <= new_value <= 3:
-                        self.zx_opt_level = new_value
-                        print(f"\nZX optimization level set to: {self.zx_opt_level}")
+                        # Use the API to update the ZX optimization level
+                        self.api.set_config(zx_opt_level=new_value)
+                        print(f"\nZX optimization level set to: {new_value}")
                     else:
                         print("\nValue must be between 1 and 3!")
                 except ValueError:
@@ -879,6 +868,49 @@ class QuantumGWMenu:
             except:
                 print(f"\nVisualization available at: {fig_path}")
     
+    def _display_comparison_results(self, comparison_result):
+        """Display comparison results from the API"""
+        self._clear_screen()
+        print("\n" + "="*72)
+        print("  PIPELINE COMPARISON")
+        print("=" * 72)
+        
+        # Create comparison table
+        headers = ["Pipeline", "Final SNR", "Improvement", "Time (s)"]
+        table_data = []
+        
+        for pipeline in comparison_result['pipelines']:
+            table_data.append([
+                pipeline['name'],
+                f"{pipeline['final_snr']:.4f}",
+                f"{pipeline['improvement']:.2f}x",
+                f"{pipeline['execution_time']:.2f}"
+            ])
+        
+        print("\nRanked by Final SNR:")
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+        
+        # Check if there's a visualization to show
+        if 'file_paths' in comparison_result and 'visualization' in comparison_result['file_paths']:
+            viz_path = comparison_result['file_paths']['visualization']
+            print(f"\nComparison visualization saved to: {viz_path}")
+            
+            # Ask if user wants to view the visualization
+            view_viz = input("\nView visualization? (y/n): ")
+            if view_viz.lower() == 'y':
+                # Try to open the image with default viewer
+                try:
+                    if sys.platform.startswith('darwin'):  # macOS
+                        subprocess.call(('open', viz_path))
+                    elif sys.platform.startswith('linux'):  # Linux
+                        subprocess.call(('xdg-open', viz_path))
+                    elif sys.platform.startswith('win'):  # Windows
+                        subprocess.call(('start', viz_path), shell=True)
+                    else:
+                        print(f"\nVisualization available at: {viz_path}")
+                except Exception:
+                    print(f"\nVisualization available at: {viz_path}")
+    
     def _sweep_qubit_count(self):
         """Perform a qubit count sweep"""
         self._clear_screen()
@@ -927,23 +959,20 @@ class QuantumGWMenu:
             
             # Run sweep
             print(f"\nRunning qubit count sweep for {topology} topology...")
-            self._ensure_data_loaded()
             
-            results = []
+            # Set up base config params if needed
+            base_config = None
             
-            for qubits in valid_counts:
-                print(f"\nTesting {qubits}-qubit {topology} detector...")
-                
-                # Create single-stage pipeline
-                pipeline_config = [(qubits, topology)]
-                
-                # Run the pipeline
-                result = self._run_pipeline(pipeline_config)
-                result['name'] = f"{qubits}-{topology}"
-                results.append(result)
+            # Use the API to run the sweep
+            results = self.api.sweep_qubit_count(topology, valid_counts, base_config)
             
-            # Display comparison
-            self._compare_pipeline_results(results)
+            # Display results
+            if isinstance(results, list) and results:
+                # If it's a list of individual results, compare them
+                self._compare_pipeline_results(results)
+            else:
+                # If it's already a comparison result
+                print("\nSweep completed successfully!")
             
             input("\nPress Enter to continue...")
             
@@ -1000,23 +1029,20 @@ class QuantumGWMenu:
         
         # Run sweep
         print(f"\nRunning topology sweep for {qubits} qubits...")
-        self._ensure_data_loaded()
         
-        results = []
+        # Set up base config params if needed
+        base_config = None
         
-        for topology in topologies:
-            print(f"\nTesting {qubits}-qubit {topology} detector...")
-            
-            # Create single-stage pipeline
-            pipeline_config = [(qubits, topology)]
-            
-            # Run the pipeline
-            result = self._run_pipeline(pipeline_config)
-            result['name'] = f"{qubits}-{topology}"
-            results.append(result)
+        # Use the API to run the sweep
+        results = self.api.sweep_topology(qubits, topologies, base_config)
         
-        # Display comparison
-        self._compare_pipeline_results(results)
+        # Display results
+        if isinstance(results, list) and results:
+            # If it's a list of individual results, compare them
+            self._compare_pipeline_results(results)
+        else:
+            # If it's already a comparison result
+            print("\nSweep completed successfully!")
         
         input("\nPress Enter to continue...")
     
@@ -1095,27 +1121,20 @@ class QuantumGWMenu:
             
             # Run sweep
             print(f"\nRunning scale factor sweep for {config[0][0]}-qubit {config[0][1]} detector...")
-            self._ensure_data_loaded()
             
-            orig_scale_factor = self.scale_factor
-            results = []
+            # Set up base config params if needed
+            base_config = None
             
-            for factor in scale_factors:
-                print(f"\nTesting scale factor: {factor:.2e}...")
-                
-                # Temporarily change scale factor
-                self.scale_factor = factor
-                
-                # Run the pipeline
-                result = self._run_pipeline(config)
-                result['name'] = f"Scale {factor:.2e}"
-                results.append(result)
+            # Use the API to run the sweep
+            results = self.api.sweep_scale_factor(config, scale_factors, base_config)
             
-            # Restore original scale factor
-            self.scale_factor = orig_scale_factor
-            
-            # Display comparison
-            self._compare_pipeline_results(results)
+            # Display results
+            if isinstance(results, list) and results:
+                # If it's a list of individual results, compare them
+                self._compare_pipeline_results(results)
+            else:
+                # If it's already a comparison result
+                print("\nSweep completed successfully!")
             
             input("\nPress Enter to continue...")
             
