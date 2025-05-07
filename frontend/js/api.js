@@ -4,8 +4,8 @@
  */
 
 const API = (() => {
-    // API configuration
-    const API_BASE_URL = 'http://localhost:8000';
+    // API configuration - Use relative path so it works from any host
+    const API_BASE_URL = ''; // Was 'http://localhost:8000'
     
     /**
      * Generic function to handle API errors
