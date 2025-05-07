@@ -24,6 +24,15 @@
                 <li><a href="#" id="nav-visualizations"><i class="fas fa-chart-line"></i> Visualizations</a></li>
             </ul>
         </nav>
+        <div class="theme-toggle">
+            <label for="theme-switch" class="theme-switch-label">
+                <i class="fas fa-sun"></i> <!-- Light mode icon -->
+                <input type="checkbox" id="theme-switch" class="theme-switch-checkbox">
+                <span class="theme-switch-slider"></span>
+                <i class="fas fa-moon"></i> <!-- Dark mode icon -->
+            </label>
+        </div>
+        <div id="header-spinner" class="spinner hidden"></div> <!-- Add spinner here -->
     </header>
 
     <main id="main-content">
@@ -303,11 +312,7 @@
         <p>&copy; 2025 Quantum Gravitational Wave Detector Project</p>
     </footer>
 
-    <!-- Loading Module First -->
-    <div id="loading-overlay" class="hidden">
-        <div class="spinner"></div>
-        <p id="loading-message">Processing...</p>
-    </div>
+    <!-- Removed full screen loading overlay -->
 
     <!-- JavaScript Modules -->
     <script src="js/api.js"></script>

@@ -37,7 +37,35 @@ const UI = (() => {
             window.scrollTo(0, 0);
         }
     };
-    
+
+    /**
+     * Apply the saved or preferred theme on load.
+     */
+    const applyInitialTheme = () => {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const themeSwitch = document.getElementById('theme-switch');
+
+        if (savedTheme) {
+            document.body.classList.toggle('dark-mode', savedTheme === 'dark');
+            if (themeSwitch) themeSwitch.checked = (savedTheme === 'dark');
+        } else if (prefersDark) {
+            document.body.classList.add('dark-mode');
+             if (themeSwitch) themeSwitch.checked = true;
+        }
+        console.log(`Initial theme applied: ${document.body.classList.contains('dark-mode') ? 'dark' : 'light'}`);
+    };
+
+    /**
+     * Handle theme switching.
+     */
+    const handleThemeSwitch = (event) => {
+        const isDarkMode = event.target.checked;
+        document.body.classList.toggle('dark-mode', isDarkMode);
+        localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+        console.log(`Theme switched to: ${isDarkMode ? 'dark' : 'light'}`);
+    };
+
     /**
      * Switch tabs within a tab set
      */
@@ -68,23 +96,22 @@ const UI = (() => {
     };
     
     /**
-     * Show loading overlay with message
+     * Show header spinner (message parameter is ignored now).
      */
     const showLoading = (message = 'Processing...') => {
-        if (loadingMessage) {
-            loadingMessage.textContent = message;
-        }
-        if (loadingOverlay) {
-            loadingOverlay.classList.remove('hidden');
+        const spinner = document.getElementById('header-spinner');
+        if (spinner) {
+            spinner.classList.remove('hidden');
         }
     };
     
     /**
-     * Hide loading overlay
+     * Hide header spinner.
      */
     const hideLoading = () => {
-        if (loadingOverlay) {
-            loadingOverlay.classList.add('hidden');
+         const spinner = document.getElementById('header-spinner');
+        if (spinner) {
+            spinner.classList.add('hidden');
         }
     };
     
@@ -144,6 +171,15 @@ const UI = (() => {
                 showPanel('results-panel');
             });
         }
+
+        // Add theme switch listener
+        const themeSwitch = document.getElementById('theme-switch');
+        if (themeSwitch) {
+            themeSwitch.addEventListener('change', handleThemeSwitch);
+        }
+
+        // Apply initial theme on load
+        applyInitialTheme();
     };
     
     // Return public interface
