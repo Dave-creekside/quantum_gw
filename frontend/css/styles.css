@@ -188,8 +188,8 @@ main {
 
 .panel {
     display: none;
-    background-color: rgba(255, 255, 255, 0.95); /* Slightly transparent */
-    border-radius: 5px;
+    background-color: rgba(255, 255, 255, 0.75); /* Increased transparency */
+    border-radius: 10px; /* More rounded corners */
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15); /* Stronger shadow for distinction */
     padding: 2rem;
     margin-bottom: 2rem;
@@ -197,7 +197,7 @@ main {
 }
 
 body.dark-mode .panel {
-    background-color: rgba(45, 45, 45, 0.95); /* Dark semi-transparent */
+    background-color: rgba(45, 45, 45, 0.75); /* Dark semi-transparent with increased transparency */
 }
 
 .panel.active {
@@ -231,11 +231,19 @@ textarea {
     width: 100%;
     padding: 0.75rem;
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: 10px; /* More rounded corners */
     font-size: 1rem;
     margin-bottom: 0.25rem;
-    background-color: var(--input-bg, white); /* Dark mode background */
+    background-color: rgba(255, 255, 255, 0.75); /* Increased transparency */
     color: var(--input-text, var(--text-color)); /* Dark mode text */
+    backdrop-filter: blur(3px); /* Light blur effect */
+}
+
+body.dark-mode input[type="text"],
+body.dark-mode input[type="number"],
+body.dark-mode select,
+body.dark-mode textarea {
+    background-color: rgba(58, 58, 58, 0.75); /* Dark semi-transparent */
 }
 
 /* Placeholder text color */
@@ -285,7 +293,7 @@ input[type="checkbox"] {
     color: white;
     border: none;
     padding: 0.75rem 1.5rem;
-    border-radius: 4px;
+    border-radius: 10px; /* More rounded corners */
     font-size: 1rem;
     transition: background-color 0.3s;
 }
@@ -299,7 +307,7 @@ input[type="checkbox"] {
     color: var(--button-secondary-text, var(--primary-color));
     border: 1px solid var(--button-secondary-border, var(--primary-color));
     padding: 0.75rem 1.5rem;
-    border-radius: 4px;
+    border-radius: 10px; /* More rounded corners */
     font-size: 1rem;
     transition: all 0.3s;
 }
@@ -439,11 +447,16 @@ input[type="checkbox"] {
 }
 
 .dashboard-card {
-    background-color: var(--card-bg, white);
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    background-color: rgba(255, 255, 255, 0.75); /* Increased transparency */
+    border-radius: 10px; /* More rounded corners */
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
     padding: 1.5rem;
-    border: 1px solid var(--border-color); /* Add border for dark mode */
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(3px); /* Light blur for readability */
+}
+
+body.dark-mode .dashboard-card {
+    background-color: rgba(45, 45, 45, 0.75); /* Dark semi-transparent */
 }
 
 /* Pipeline Results & Other Containers */
@@ -455,9 +468,19 @@ input[type="checkbox"] {
 .save-as-project {
     margin-top: 2rem;
     padding: 1.5rem;
-    background-color: var(--input-bg, #f8f9fa); /* Use input background for consistency */
-    border-radius: 5px;
+    background-color: rgba(255, 255, 255, 0.75); /* Increased transparency */
+    border-radius: 10px; /* More rounded corners */
     border: 1px solid var(--border-color);
+    backdrop-filter: blur(3px); /* Light blur effect */
+}
+
+body.dark-mode .result-container,
+body.dark-mode .pipeline-description,
+body.dark-mode .pipeline-stage,
+body.dark-mode .project-selector,
+body.dark-mode .visualization-container,
+body.dark-mode .save-as-project {
+    background-color: rgba(45, 45, 45, 0.75); /* Dark semi-transparent */
 }
 .pipeline-stage { margin-top: 0; margin-bottom: 1rem; } /* Adjust stage margin */
 .pipeline-description { margin-top: 0; margin-bottom: 1.5rem; }
@@ -740,12 +763,17 @@ p.error {
 
 /* Cards */
 .card {
-    background-color: var(--card-bg, white);
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    background-color: rgba(255, 255, 255, 0.75);
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
     padding: 1.5rem;
     margin-bottom: 1.5rem;
-     border: 1px solid var(--border-color); /* Add border for dark mode */
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(3px);
+}
+
+body.dark-mode .card {
+    background-color: rgba(45, 45, 45, 0.75);
 }
 
 /* Active Project Banner */
@@ -1004,7 +1032,7 @@ body {
 .collapsible-section {
     margin-bottom: 1.5rem;
     border: 1px solid var(--border-color);
-    border-radius: 5px;
+    border-radius: 10px; /* More rounded corners */
     overflow: hidden;
 }
 
@@ -1013,9 +1041,14 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
-    background-color: var(--panel-bg, #f8f9fa);
+    background-color: rgba(255, 255, 255, 0.75); /* Increased transparency */
     border-bottom: 1px solid var(--border-color);
     cursor: pointer;
+    backdrop-filter: blur(3px); /* Light blur effect */
+}
+
+body.dark-mode .collapsible-header {
+    background-color: rgba(45, 45, 45, 0.75); /* Dark semi-transparent */
 }
 
 .collapsible-header h4 {
