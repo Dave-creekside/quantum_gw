@@ -1,0 +1,24 @@
+# Core Requirements
+numpy>=1.20.0         # Numerical computing
+pennylane>=0.28.0     # Quantum simulation
+matplotlib>=3.4.0     # Plotting and visualization
+tqdm>=4.61.0          # Progress bars
+gwpy>=2.0.0           # Gravitational wave data handling
+h5py>=3.1.0           # HDF5 file handling
+tabulate>=0.8.9       # Text-based table output
+torch>=1.9.0          # PyTorch for GPU acceleration
+psutil>=5.8.0         # System resource monitoring
+
+# Web Interface (pip install -r requirements.txt[web])
+fastapi>=0.68.0       # API framework
+uvicorn>=0.15.0       # ASGI server
+pydantic>=1.8.2       # Data validation
+
+# ZX-Calculus Optimization (optional) (pip install -r requirements.txt[zx])
+pyzx>=0.7.0           # ZX-calculus for circuit optimization
+
+# Install options:
+# - Core only:    pip install -r requirements.txt
+# - With web UI:  pip install -e ".[web]"
+# - With ZX:      pip install -e ".[zx]"
+# - Full install: pip install -e ".[web,zx]"
