@@ -17,6 +17,7 @@ setup(
         "h5py>=3.1.0",
         "tabulate>=0.8.9",
         "torch>=1.9.0",
+        "psutil>=5.8.0", # Added for system stats
     ],
     extras_require={
         "web": [

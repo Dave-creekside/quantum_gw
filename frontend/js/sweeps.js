@@ -278,11 +278,11 @@ const SweepsModule = (() => {
         
         container.innerHTML = chartHtml;
         
-        // Add CSS for chart
-        if (!document.getElementById('chart-styles')) {
-            const styleEl = document.createElement('style');
-            styleEl.id = 'chart-styles';
-            styleEl.textContent = `
+            // Add CSS for chart
+            if (!document.getElementById('chart-styles')) {
+                const styleEl = document.createElement('style');
+                styleEl.id = 'chart-styles';
+                styleEl.textContent = `
                 .sweep-chart {
                     margin-top: 2rem;
                     padding: 1rem;

@@ -56,33 +56,119 @@ class GPUMonitor:
             return info
         
         # Get PyTorch GPU info
-        info["device_count"] = torch.cuda.device_count()
-        info["current_device"] = torch.cuda.current_device()
-        info["device_name"] = torch.cuda.get_device_name(info["current_device"])
-        info["memory_allocated"] = torch.cuda.memory_allocated() / (1024**2)  # MB
-        info["memory_reserved"] = torch.cuda.memory_reserved() / (1024**2)    # MB
-        info["max_memory_allocated"] = torch.cuda.max_memory_allocated() / (1024**2)  # MB
+        try:
+            info["device_count"] = torch.cuda.device_count()
+            info["current_device"] = torch.cuda.current_device()
+            info["device_name"] = torch.cuda.get_device_name(info["current_device"])
+            info["memory_allocated"] = torch.cuda.memory_allocated() / (1024**2)  # MB
+            info["memory_reserved"] = torch.cuda.memory_reserved() / (1024**2)    # MB
+            info["max_memory_allocated"] = torch.cuda.max_memory_allocated() / (1024**2)  # MB
+        except Exception as e:
+            print(f"Warning: Error getting PyTorch GPU info: {e}")
+            # Set reasonable defaults for essential fields
+            info["device_name"] = info.get("device_name", "Unknown GPU")
+            info["memory_reserved"] = info.get("memory_reserved", 0)
         
         # Try to get additional info from nvidia-smi
+        # First attempt with default parameters
+        nvidia_smi_success = self._try_nvidia_smi(info)
+        
+        # If failed, try again with longer timeout and simpler query
+        if not nvidia_smi_success and "nvidia_smi_memory_total" not in info:
+            self._try_nvidia_smi_simple(info)
+            
+        return info
+        
+    def _try_nvidia_smi(self, info, timeout=2):
+        """Try to get info from nvidia-smi with full query"""
         try:
             result = subprocess.run(
                 ['nvidia-smi', '--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu', 
                  '--format=csv,noheader,nounits'],
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                timeout=timeout  # Add timeout parameter
             )
-            if result.returncode == 0:
-                util, mem_used, mem_total, temp = result.stdout.strip().split(',')
-                info["utilization"] = float(util.strip())
-                info["temperature"] = float(temp.strip())
-                info["nvidia_smi_memory_used"] = float(mem_used.strip())
-                info["nvidia_smi_memory_total"] = float(mem_total.strip())
+            
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    values = result.stdout.strip().split(',')
+                    if len(values) == 4:  # Ensure we got all expected values
+                        util, mem_used, mem_total, temp = values
+                        
+                        # Try to convert each value, but don't fail if one conversion fails
+                        try:
+                            info["utilization"] = float(util.strip())
+                        except (ValueError, TypeError):
+                            info["utilization"] = None
+                            
+                        try:
+                            info["temperature"] = float(temp.strip())
+                        except (ValueError, TypeError):
+                            info["temperature"] = None
+                            
+                        try:
+                            info["nvidia_smi_memory_used"] = float(mem_used.strip())
+                        except (ValueError, TypeError):
+                            info["nvidia_smi_memory_used"] = None
+                            
+                        try:
+                            info["nvidia_smi_memory_total"] = float(mem_total.strip())
+                        except (ValueError, TypeError):
+                            info["nvidia_smi_memory_total"] = None
+                            
+                        return True
+                except Exception as e:
+                    print(f"Error parsing nvidia-smi output: {e}, Output: {result.stdout}")
+            return False
+        except subprocess.TimeoutExpired:
+            print(f"nvidia-smi command timed out after {timeout} seconds")
+            return False
         except Exception as e:
             # nvidia-smi might not be available or accessible
-            info["error"] = f"Error fetching nvidia-smi data: {str(e)}"
-        
-        return info
+            print(f"Error running nvidia-smi: {str(e)}")
+            return False
+            
+    def _try_nvidia_smi_simple(self, info, timeout=3):
+        """Try a simpler nvidia-smi query as fallback"""
+        try:
+            # Try a simpler query that might be more likely to succeed
+            result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader,nounits'],
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    values = result.stdout.strip().split(',')
+                    if len(values) >= 2:
+                        name, mem_total = values[0], values[1]
+                        
+                        # Only update if we got valid values
+                        if name and name.strip():
+                            info["device_name"] = name.strip()
+                            
+                        try:
+                            mem_total_val = float(mem_total.strip())
+                            info["nvidia_smi_memory_total"] = mem_total_val
+                            # Estimate used memory from PyTorch if available
+                            if "memory_reserved" in info:
+                                info["nvidia_smi_memory_used"] = info["memory_reserved"]
+                                if mem_total_val > 0:
+                                    info["utilization"] = (info["memory_reserved"] / mem_total_val) * 100
+                        except (ValueError, TypeError):
+                            pass
+                            
+                        return True
+                except Exception as e:
+                    print(f"Error parsing simple nvidia-smi output: {e}")
+            return False
+        except Exception as e:
+            print(f"Error running simple nvidia-smi query: {e}")
+            return False
     
     def log(self, operation="", reset_max=False, print_info=True):
         """Log current GPU utilization with an optional operation name"""

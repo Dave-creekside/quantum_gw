@@ -255,7 +255,7 @@ const PipelinesModule = (() => {
     };
     
     /**
-     * Display pipeline results
+     * Display pipeline results with collapsible sections
      */
     const displayPipelineResults = (results, pipelineName) => {
         if (!pipelineResultContainer) return;
@@ -273,69 +273,140 @@ const PipelinesModule = (() => {
             `;
         }).join('');
         
-        // Create HTML for result
+        // Create HTML for result with collapsible sections
         const html = `
             <h3>${pipelineName} Results</h3>
             
-            <div class="result-summary">
-                <h4>Summary</h4>
-                <table>
-                    <tr>
-                        <th>Event</th>
-                        <td>${results.event_name}</td>
-                    </tr>
-                    <tr>
-                        <th>Pipeline Configuration</th>
-                        <td>${results.pipeline_config}</td>
-                    </tr>
-                    <tr>
-                        <th>First Stage SNR</th>
-                        <td>${UI.formatValue(results.summary.first_stage_snr, 'decimal')}</td>
-                    </tr>
-                    <tr>
-                        <th>Final Stage SNR</th>
-                        <td>${UI.formatValue(results.summary.final_stage_snr, 'decimal')}</td>
-                    </tr>
-                    <tr>
-                        <th>Improvement Factor</th>
-                        <td>${UI.formatValue(results.summary.improvement_factor, 'decimal')}×</td>
-                    </tr>
-                    <tr>
-                        <th>Total Execution Time</th>
-                        <td>${UI.formatValue(results.summary.total_execution_time, 'decimal')} s</td>
-                    </tr>
-                </table>
+            <div class="collapsible-section">
+                <div class="collapsible-header">
+                    <h4>Summary</h4>
+                    <button class="collapse-toggle" aria-expanded="true" aria-controls="summary-content">
+                        <i class="fas fa-chevron-up"></i>
+                    </button>
+                </div>
+                <div id="summary-content" class="collapsible-content expanded">
+                    <table>
+                        <tr>
+                            <th>Event</th>
+                            <td>${results.event_name}</td>
+                        </tr>
+                        <tr>
+                            <th>Pipeline Configuration</th>
+                            <td>${results.pipeline_config}</td>
+                        </tr>
+                        <tr>
+                            <th>First Stage SNR</th>
+                            <td>${UI.formatValue(results.summary.first_stage_snr, 'decimal')}</td>
+                        </tr>
+                        <tr>
+                            <th>Final Stage SNR</th>
+                            <td>${UI.formatValue(results.summary.final_stage_snr, 'decimal')}</td>
+                        </tr>
+                        <tr>
+                            <th>Improvement Factor</th>
+                            <td>${UI.formatValue(results.summary.improvement_factor, 'decimal')}×</td>
+                        </tr>
+                        <tr>
+                            <th>Total Execution Time</th>
+                            <td>${UI.formatValue(results.summary.total_execution_time, 'decimal')} s</td>
+                        </tr>
+                    </table>
+                </div>
             </div>
             
-            <div class="result-stages">
-                <h4>Stage Results</h4>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Stage</th>
-                            <th>Configuration</th>
-                            <th>SNR</th>
-                            <th>Max QFI</th>
-                            <th>Execution Time</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${stagesHtml}
-                    </tbody>
-                </table>
+            <div class="collapsible-section">
+                <div class="collapsible-header">
+                    <h4>Stage Results</h4>
+                    <button class="collapse-toggle" aria-expanded="false" aria-controls="stages-content">
+                        <i class="fas fa-chevron-up"></i>
+                    </button>
+                </div>
+                <div id="stages-content" class="collapsible-content collapsed">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Stage</th>
+                                <th>Configuration</th>
+                                <th>SNR</th>
+                                <th>Max QFI</th>
+                                <th>Execution Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${stagesHtml}
+                        </tbody>
+                    </table>
+                </div>
             </div>
             
             ${results.file_paths && results.file_paths.visualization ? `
-                <div class="result-visualization">
-                    <h4>Visualization</h4>
-                    <img src="${VisualizationsModule.formatVisualizationPath(results.file_paths.visualization)}" alt="Pipeline Visualization"
-                         onerror="this.onerror=null; this.src=''; this.alt='Failed to load image'; this.style.display='none'; this.parentNode.innerHTML += '<p class=\\'error\\'>Failed to load visualization image.</p>';">
+                <div class="collapsible-section">
+                    <div class="collapsible-header">
+                        <h4>Visualization</h4>
+                        <button class="collapse-toggle" aria-expanded="true" aria-controls="visualization-content">
+                            <i class="fas fa-chevron-up"></i>
+                        </button>
+                    </div>
+                    <div id="visualization-content" class="collapsible-content expanded">
+                        <div class="result-visualization-container">
+                            <img src="${VisualizationsModule.formatVisualizationPath(results.file_paths.visualization)}" alt="Pipeline Visualization"
+                                 onerror="this.onerror=null; this.src=''; this.alt='Failed to load image'; this.style.display='none'; this.parentNode.innerHTML += '<p class=\\'error\\'>Failed to load visualization image.</p>';">
+                        </div>
+                    </div>
                 </div>
             ` : ''}
         `;
         
         pipelineResultContainer.innerHTML = html;
+        
+        // Add event listeners for collapsible sections
+        addCollapseListeners();
+        
         pipelineResultContainer.scrollIntoView({ behavior: 'smooth' });
+    };
+    
+    /**
+     * Add event listeners for collapsible content sections
+     */
+    const addCollapseListeners = () => {
+        if (!pipelineResultContainer) return;
+        
+        const toggleButtons = pipelineResultContainer.querySelectorAll('.collapse-toggle');
+        toggleButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                
+                // Get the content container this button controls
+                const contentId = button.getAttribute('aria-controls');
+                const contentEl = document.getElementById(contentId);
+                
+                // Get current state
+                const isExpanded = button.getAttribute('aria-expanded') === 'true';
+                
+                // Toggle state
+                button.setAttribute('aria-expanded', !isExpanded);
+                if (isExpanded) {
+                    contentEl.classList.remove('expanded');
+                    contentEl.classList.add('collapsed');
+                } else {
+                    contentEl.classList.remove('collapsed');
+                    contentEl.classList.add('expanded');
+                }
+            });
+        });
+        
+        // Also make entire headers clickable (for better UX)
+        const headers = pipelineResultContainer.querySelectorAll('.collapsible-header');
+        headers.forEach(header => {
+            header.addEventListener('click', (e) => {
+                // Don't trigger if they clicked directly on the button (it has its own handler)
+                if (e.target.closest('.collapse-toggle')) return;
+                
+                // Simulate click on the header's button
+                const button = header.querySelector('.collapse-toggle');
+                button.click();
+            });
+        });
     };
     
     /**

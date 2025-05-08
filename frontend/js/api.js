@@ -226,6 +226,38 @@ const API = (() => {
         analyzeQuantumState,
         getCircuitVisualization,
         batchExportResults,
-        runNoiseAnalysis
+        runNoiseAnalysis,
+
+        // System Stats
+        getSystemStats: () => get('/api/system_stats'),
+
+        // Update Project Configuration
+        updateProjectConfiguration: (projectId, configData) => {
+            // Need a PUT method helper
+            const put = async (endpoint, data) => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.detail || `Error: ${response.status} ${response.statusText}`);
+                    }
+                    
+                    const responseData = await response.json();
+                    return { success: true, data: responseData };
+                } catch (error) {
+                    return handleApiError(error);
+                }
+            };
+            
+            console.log(`Updating configuration for project ${projectId}:`, configData);
+            return put(`/api/projects/${projectId}/configuration`, configData);
+        }
     };
 })();

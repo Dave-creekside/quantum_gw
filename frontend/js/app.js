@@ -35,6 +35,160 @@ const UI = (() => {
             
             // Scroll to top
             window.scrollTo(0, 0);
+
+            // Fetch system stats if dashboard is shown
+            if (panelId === 'dashboard-panel') {
+                fetchAndDisplaySystemStats();
+            }
+        }
+    };
+
+    /**
+     * Fetch and display system stats on the dashboard.
+     */
+    const fetchAndDisplaySystemStats = async () => {
+        const container = document.getElementById('dashboard-system-stats');
+        if (!container) return;
+
+        // Find elements within the container
+        const cpuBar = container.querySelector('.cpu-bar');
+        const cpuValue = container.querySelector('.cpu-bar + .stat-value');
+        const ramBar = container.querySelector('.ram-bar');
+        const ramValue = container.querySelector('.ram-bar + .stat-value');
+        const gpuBar = container.querySelector('.gpu-bar');
+        const gpuValue = container.querySelector('.gpu-bar + .stat-value');
+        const vramBar = container.querySelector('.vram-bar');
+        const vramValue = container.querySelector('.vram-bar + .stat-value');
+        const gpuDetails = document.getElementById('gpu-details');
+
+        // Helper to update a bar and its value
+        const updateStat = (barEl, valueEl, percent, textValue = null) => {
+            if (barEl && valueEl) {
+                // Handle the 'Error' string case explicitly
+                const isError = percent === 'Error' || (textValue && textValue.includes('Error'));
+                const isNA = percent === 'N/A' || (textValue && textValue === 'N/A');
+                
+                // Determine what percentage to display (0 for error/N/A, the actual percent for valid numbers)
+                const displayPercent = (typeof percent === 'number' && !isNaN(percent)) ? percent : 0;
+                
+                // Determine what text to display
+                let displayText;
+                if (textValue !== null) {
+                    displayText = textValue; // Use provided text value if available
+                } else if (isError) {
+                    displayText = 'Error'; // Show Error text
+                } else if (isNA) {
+                    displayText = 'N/A'; // Show N/A text
+                } else if (typeof percent === 'number' && !isNaN(percent)) {
+                    displayText = `${percent.toFixed(1)}%`; // Show formatted percentage
+                } else {
+                    displayText = 'N/A'; // Fallback for any other unexpected value
+                }
+
+                // Update UI elements
+                barEl.style.width = `${displayPercent}%`;
+                valueEl.textContent = displayText;
+                
+                // Add appropriate classes for styling
+                const parentEl = barEl.parentElement;
+                parentEl.classList.remove('error', 'na');
+                if (isError) {
+                    parentEl.classList.add('error');
+                } else if (isNA) {
+                    parentEl.classList.add('na');
+                }
+            }
+        };
+
+        // Show loading state
+        updateStat(cpuBar, cpuValue, 0, 'Loading...');
+        updateStat(ramBar, ramValue, 0, 'Loading...');
+        updateStat(gpuBar, gpuValue, 0, 'Loading...');
+        updateStat(vramBar, vramValue, 0, 'Loading...');
+        if(gpuDetails) gpuDetails.textContent = 'Loading GPU details...';
+
+        const response = await API.getSystemStats();
+
+        if (response.success) {
+            const stats = response.data;
+            console.log("System Stats:", stats);
+
+            // Safe number conversion helper
+            const safeNumber = (val) => {
+                return (typeof val === 'number' && !isNaN(val)) ? val :
+                       (typeof val === 'string' && !isNaN(parseFloat(val))) ? parseFloat(val) : null;
+            };
+            
+            // Format a value safely
+            const formatNumber = (val, decimals = 1) => {
+                const num = safeNumber(val);
+                return num !== null ? num.toFixed(decimals) : 'N/A';
+            };
+            
+            // CPU stats
+            updateStat(cpuBar, cpuValue, safeNumber(stats.cpu_percent));
+            
+            // RAM stats - Create human-readable display
+            const ramPercentVal = safeNumber(stats.ram_percent);
+            let ramDisplayText;
+            
+            if (stats.ram_used_gb === 'N/A' || stats.ram_total_gb === 'N/A') {
+                ramDisplayText = 'N/A';
+            } else if (stats.ram_used_gb === 'Error' || stats.ram_total_gb === 'Error') {
+                ramDisplayText = 'Error';
+            } else {
+                const usedGB = formatNumber(stats.ram_used_gb);
+                const totalGB = formatNumber(stats.ram_total_gb);
+                const percentText = ramPercentVal !== null ? `(${formatNumber(ramPercentVal)}%)` : '';
+                ramDisplayText = `${usedGB}/${totalGB} GB ${percentText}`;
+            }
+            updateStat(ramBar, ramValue, ramPercentVal, ramDisplayText);
+            
+            // GPU Utilization
+            updateStat(gpuBar, gpuValue, safeNumber(stats.gpu_utilization_percent));
+            
+            // VRAM stats - Create human-readable display
+            const vramPercentVal = safeNumber(stats.vram_percent);
+            let vramDisplayText;
+            
+            if (stats.vram_used_mb === 'N/A' || stats.vram_total_mb === 'N/A') {
+                vramDisplayText = 'N/A';
+            } else if (stats.vram_used_mb === 'Error' || stats.vram_total_mb === 'Error') {
+                vramDisplayText = 'Error';
+            } else {
+                const usedMB = formatNumber(stats.vram_used_mb, 0);
+                const totalMB = formatNumber(stats.vram_total_mb, 0);
+                const percentText = vramPercentVal !== null ? `(${formatNumber(vramPercentVal)}%)` : '';
+                vramDisplayText = `${usedMB}/${totalMB} MB ${percentText}`;
+            }
+            updateStat(vramBar, vramValue, vramPercentVal, vramDisplayText);
+
+            // GPU Details
+            if(gpuDetails) {
+                let detailsText = '';
+                if (stats.gpu_name && stats.gpu_name !== 'N/A' && !stats.gpu_name.includes('Error')) {
+                    detailsText += `${stats.gpu_name}`;
+                    
+                    // Add temperature if available
+                    const tempVal = safeNumber(stats.gpu_temperature_c);
+                    if (tempVal !== null) {
+                        detailsText += ` (${tempVal.toFixed(0)}°C)`;
+                    }
+                } else if (stats.gpu_name && stats.gpu_name.includes('Error')) {
+                    detailsText = `Error detecting GPU: ${stats.gpu_name.replace('Error: ', '')}`;
+                } else {
+                    detailsText = 'GPU not available';
+                }
+                gpuDetails.textContent = detailsText;
+            }
+
+        } else {
+            console.error("Error fetching system stats:", response.error);
+            updateStat(cpuBar, cpuValue, 'Error', 'Error');
+            updateStat(ramBar, ramValue, 'Error', 'Error');
+            updateStat(gpuBar, gpuValue, 'Error', 'Error');
+            updateStat(vramBar, vramValue, 'Error', 'Error');
+            if(gpuDetails) gpuDetails.textContent = `Error fetching stats: ${response.error || 'Unknown error'}`;
         }
     };
 
@@ -180,6 +334,17 @@ const UI = (() => {
 
         // Apply initial theme on load
         applyInitialTheme();
+
+        // Add listener for stats refresh button
+        const refreshStatsBtn = document.getElementById('refresh-stats-btn');
+        if (refreshStatsBtn) {
+            refreshStatsBtn.addEventListener('click', fetchAndDisplaySystemStats);
+        }
+
+        // Initial fetch for dashboard if it's the active panel on load
+        if (document.getElementById('dashboard-panel')?.classList.contains('active')) {
+             fetchAndDisplaySystemStats();
+        }
     };
     
     // Return public interface

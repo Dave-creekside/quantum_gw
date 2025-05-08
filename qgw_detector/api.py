@@ -5,9 +5,11 @@ import numpy as np
 import time
 import uuid
 from datetime import datetime
+import traceback # For more detailed error logging
 
 from qgw_detector.data.ligo import fetch_gw_data, preprocess_gw_data
 from qgw_detector.quantum.circuits import QuantumGWDetector
+from qgw_detector.utils.gpu_monitor import GPUMonitor # Import the monitor
 
 class QuantumGWAPI:
     """API for the Quantum Gravitational Wave Detector"""
@@ -51,6 +53,14 @@ class QuantumGWAPI:
         # Create directories
         os.makedirs("data/experiments", exist_ok=True)
         self.results_dir = "data/experiments" # Define results directory for later use
+
+        # Initialize GPU Monitor (log to console, not file by default for API use)
+        try:
+            self.gpu_monitor = GPUMonitor(log_to_file=False)
+            print("GPUMonitor initialized.")
+        except Exception as e:
+            print(f"Warning: Failed to initialize GPUMonitor: {e}")
+            self.gpu_monitor = None
     
     def get_config(self):
         """Get current configuration"""
@@ -338,7 +348,7 @@ class QuantumGWAPI:
             result_data = json.load(f)
         return result_data
 
-    def sweep_qubit_count(self, topology: str, qubit_counts: list, base_config_params: dict = None):
+    def sweep_qubit_count(self, topology: str, qubit_counts: list, base_config_params: dict = None, active_project_id=None):
         """Perform a qubit count sweep for a given topology."""
         results = []
         original_config = self.config.copy()
@@ -346,8 +356,6 @@ class QuantumGWAPI:
             self.set_config(**base_config_params)
 
         self._ensure_data_loaded() # Ensure data is loaded based on current config (e.g. event_name)
-
-        active_project_id = kwargs.get('active_project_id') # Get project ID from kwargs
 
         for qubits in qubit_counts:
             if self.config.get('use_zx_opt') and qubits == 8 and topology == 'full':
@@ -369,7 +377,7 @@ class QuantumGWAPI:
             self.config = original_config
         return results
 
-    def sweep_topology(self, qubit_count: int, topologies: list, base_config_params: dict = None):
+    def sweep_topology(self, qubit_count: int, topologies: list, base_config_params: dict = None, active_project_id=None):
         """Perform a topology sweep for a given qubit count."""
         results = []
         original_config = self.config.copy()
@@ -377,8 +385,6 @@ class QuantumGWAPI:
             self.set_config(**base_config_params)
 
         self._ensure_data_loaded()
-
-        active_project_id = kwargs.get('active_project_id') # Get project ID from kwargs
 
         for topology in topologies:
             if self.config.get('use_zx_opt') and qubit_count == 8 and topology == 'full':
@@ -400,7 +406,7 @@ class QuantumGWAPI:
             self.config = original_config
         return results
 
-    def sweep_scale_factor(self, pipeline_config: list, scale_factors: list, base_config_params: dict = None):
+    def sweep_scale_factor(self, pipeline_config: list, scale_factors: list, base_config_params: dict = None, active_project_id=None):
         """Perform a scale factor sweep for a given pipeline configuration."""
         results = []
         original_config = self.config.copy()
@@ -415,8 +421,6 @@ class QuantumGWAPI:
         self._ensure_data_loaded()
         
         original_api_scale_factor = self.config['scale_factor'] # Save the API's current scale_factor
-
-        active_project_id = kwargs.get('active_project_id') # Get project ID from kwargs
 
         for factor in scale_factors:
             self.config['scale_factor'] = factor # Temporarily set API's scale_factor for this run
@@ -781,6 +785,7 @@ class QuantumGWAPI:
     def _ensure_data_loaded(self):
         """Ensure LIGO data is loaded"""
         event_name = self.config['event_name']
+            
         if event_name not in self.data_cache:
             times, strain, sample_rate = fetch_gw_data(event_name)
             proc_times, proc_strain = preprocess_gw_data(times, strain, sample_rate)
@@ -790,3 +795,172 @@ class QuantumGWAPI:
                 'strain': proc_strain,
                 'sample_rate': sample_rate
             }
+            
+    def get_system_stats(self):
+        """
+        Retrieves current system resource usage (CPU, RAM, GPU).
+        """
+        stats = {}
+        try:
+            import psutil
+            # CPU Stats
+            stats['cpu_percent'] = psutil.cpu_percent(interval=0.1) # Short interval for responsiveness
+
+            # RAM Stats
+            mem = psutil.virtual_memory()
+            stats['ram_total_gb'] = mem.total / (1024**3)
+            stats['ram_used_gb'] = mem.used / (1024**3)
+            stats['ram_percent'] = mem.percent
+
+        except ImportError:
+            print("Warning: psutil not installed. Cannot get CPU/RAM stats.")
+            stats['cpu_percent'] = 'N/A'
+            stats['ram_percent'] = 'N/A'
+            stats['ram_total_gb'] = 'N/A'
+            stats['ram_used_gb'] = 'N/A'
+        except Exception as e:
+            print(f"Error getting CPU/RAM stats: {e}")
+            stats['cpu_percent'] = 'Error'
+            stats['ram_percent'] = 'Error'
+            stats['ram_total_gb'] = 'N/A'
+            stats['ram_used_gb'] = 'N/A'
+
+        # Initialize GPU stats with default N/A values
+        stats['gpu_name'] = 'N/A'
+        stats['gpu_utilization_percent'] = 'N/A'
+        stats['vram_percent'] = 'N/A'
+        stats['vram_total_mb'] = 'N/A'
+        stats['vram_used_mb'] = 'N/A'
+        stats['gpu_temperature_c'] = 'N/A'
+
+        # Try to use the existing GPU monitor if it's already initialized
+        gpu_monitor = None
+        
+        # Try up to 2 times to get GPU info
+        for attempt in range(2):
+            try:
+                # Create a new monitor instance if needed
+                if gpu_monitor is None:
+                    from qgw_detector.utils.gpu_monitor import GPUMonitor
+                    gpu_monitor = GPUMonitor(log_to_file=False)
+                
+                # Get GPU info with potentially enhanced error handling
+                gpu_info = gpu_monitor.get_gpu_info()
+                
+                if gpu_info.get("available"):
+                    # GPU Name - this should always be available if GPU is available
+                    stats['gpu_name'] = gpu_info.get('device_name', 'N/A')
+                    
+                    # Utilization - might be None from improved error handling
+                    util = gpu_info.get('utilization')
+                    stats['gpu_utilization_percent'] = float(util) if isinstance(util, (int, float)) else 'N/A'
+                    
+                    # Temperature - might be None from improved error handling
+                    temp = gpu_info.get('temperature')
+                    stats['gpu_temperature_c'] = float(temp) if isinstance(temp, (int, float)) else 'N/A'
+                    
+                    # Memory metrics
+                    if 'nvidia_smi_memory_total' in gpu_info and 'nvidia_smi_memory_used' in gpu_info:
+                        total = gpu_info['nvidia_smi_memory_total']
+                        used = gpu_info['nvidia_smi_memory_used']
+                        
+                        # Validate numbers and calculate percentage
+                        if isinstance(total, (int, float)) and total > 0:
+                            stats['vram_total_mb'] = float(total)
+                            
+                            if isinstance(used, (int, float)):
+                                stats['vram_used_mb'] = float(used)
+                                stats['vram_percent'] = (used / total * 100)
+                            else:
+                                # Fallback to PyTorch values
+                                reserved = gpu_info.get('memory_reserved')
+                                if isinstance(reserved, (int, float)):
+                                    stats['vram_used_mb'] = float(reserved)
+                                    stats['vram_percent'] = (reserved / total * 100)
+                        else:
+                            # Use PyTorch's reserved memory if nvidia-smi values aren't valid
+                            reserved = gpu_info.get('memory_reserved')
+                            if isinstance(reserved, (int, float)):
+                                stats['vram_used_mb'] = float(reserved)
+                    else:
+                        # No nvidia-smi memory info, use PyTorch's reserved memory
+                        reserved = gpu_info.get('memory_reserved')
+                        if isinstance(reserved, (int, float)):
+                            stats['vram_used_mb'] = float(reserved)
+                
+                # If we got here without errors, break the retry loop
+                break
+                
+            except ImportError as e:
+                print(f"Warning: GPUMonitor utility not found: {e}")
+                # No need to retry on import error
+                break
+            except Exception as e:
+                print(f"Error getting GPU stats (attempt {attempt+1}/2): {e}")
+                # Only set error message on last attempt
+                if attempt == 1:
+                    stats['gpu_name'] = f'Error: {str(e)[:50]}...' if len(str(e)) > 50 else f'Error: {str(e)}'
+                # Short delay before retry
+                if attempt == 0:
+                    time.sleep(0.5)
+
+        # Ensure all values are either numbers or string indicators
+        for key, value in stats.items():
+            if not isinstance(value, (int, float, str)):
+                stats[key] = 'Error'
+                
+        print(f"System stats collected: {stats}")
+        return stats
+
+    def update_project_configuration(self, project_id: str, new_config_data: dict):
+        """
+        Updates the base_configuration of a specific project.
+
+        Args:
+            project_id: The ID of the project to update.
+            new_config_data: A dictionary containing the new configuration
+                             (e.g., {"parameters": {...}, "pipeline_config": [...]}).
+        
+        Returns:
+            Dict with status and updated project data.
+        """
+        try:
+            projects_dir = os.path.join(os.path.dirname(self.results_dir), "projects")
+            project_filename = f"{project_id}.json"
+            project_filepath = os.path.join(projects_dir, project_filename)
+
+            if not os.path.exists(project_filepath):
+                raise FileNotFoundError(f"Project file not found for ID {project_id}")
+
+            with open(project_filepath, "r") as f:
+                project_data = json.load(f)
+            
+            # Update the base_configuration
+            # Ensure new_config_data has the expected structure (parameters, pipeline_config)
+            if "parameters" in new_config_data and "pipeline_config" in new_config_data:
+                project_data["base_configuration"] = {
+                    "event_name": new_config_data["parameters"].get("event_name", project_data["base_configuration"].get("event_name")), # Keep old if not provided
+                    "parameters": new_config_data["parameters"],
+                    "pipeline_config": new_config_data["pipeline_config"]
+                }
+                # Update timestamp of modification (optional, but good practice)
+                project_data["modified_timestamp"] = datetime.now().strftime("%Y%m%d_%H%M%S")
+            else:
+                raise ValueError("Invalid new_config_data structure. Must contain 'parameters' and 'pipeline_config'.")
+
+            with open(project_filepath, "w") as f:
+                json.dump(project_data, f, indent=2)
+            
+            return {
+                "success": True,
+                "message": f"Project '{project_data.get('name', project_id)}' configuration updated successfully.",
+                "project_data": project_data # Return the updated project data
+            }
+        except FileNotFoundError:
+            raise # Re-raise to be caught by web_api for 404
+        except ValueError as ve:
+            raise # Re-raise to be caught by web_api for 400
+        except Exception as e:
+            print(f"Error updating project configuration for {project_id}: {e}")
+            traceback.print_exc()
+            raise Exception(f"Failed to update project configuration: {str(e)}")

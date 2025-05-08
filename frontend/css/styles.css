@@ -26,6 +26,7 @@ body.dark-mode {
     --text-color: #e1e4e8; /* Light grey text */
     --bg-color: #1e1e1e; /* Very dark grey background */
     --panel-bg: #2d2d2d; /* Dark grey panel background */
+    --card-bg-color: #2d2d2d; /* Dark grey card background */
     --border-color: #444444; /* Darker border */
     --success-color: #58d68d; /* Lighter green */
     --error-color: #ec7063; /* Lighter red */
@@ -65,6 +66,40 @@ body {
     line-height: 1.6;
     color: var(--text-color);
     background-color: var(--bg-color);
+    
+    /* Background image properties */
+    background-image: url('../assets/images/backgrounds/desktop.jpg');
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-attachment: fixed; /* Keeps background fixed during scroll */
+    position: relative; /* For overlay positioning */
+}
+
+/* Background overlay for better text readability */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* Adjustable opacity */
+    z-index: -1;
+}
+
+/* Mobile-specific background */
+@media (max-width: 768px) {
+    body {
+        background-image: url('../assets/images/backgrounds/mobile.jpg');
+        /* Mobile might benefit from scroll vs fixed for performance */
+        background-attachment: scroll;
+    }
+}
+
+/* Dark mode adjustments for background overlay */
+body.dark-mode::before {
+    background-color: rgba(0, 0, 0, 0.7); /* Darker overlay for dark mode */
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -153,11 +188,16 @@ main {
 
 .panel {
     display: none;
-    background-color: var(--panel-bg);
+    background-color: rgba(255, 255, 255, 0.95); /* Slightly transparent */
     border-radius: 5px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15); /* Stronger shadow for distinction */
     padding: 2rem;
     margin-bottom: 2rem;
+    backdrop-filter: blur(5px); /* Add slight blur effect for better readability */
+}
+
+body.dark-mode .panel {
+    background-color: rgba(45, 45, 45, 0.95); /* Dark semi-transparent */
 }
 
 .panel.active {
@@ -269,6 +309,26 @@ input[type="checkbox"] {
     color: var(--header-text, white); /* Use header text color for consistency */
     border-color: var(--button-secondary-hover-bg, var(--primary-color));
 }
+
+.icon-button {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    cursor: pointer;
+    padding: 0.25rem;
+    font-size: 0.9em; /* Slightly smaller than surrounding text */
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+.icon-button:hover {
+    opacity: 1;
+}
+.dashboard-card h3 .icon-button { /* Specificity for dashboard card header */
+     margin-left: 0.5rem;
+     position: relative;
+     top: -1px; /* Align vertically */
+}
+
 
 /* Theme Toggle Switch */
 .theme-toggle {
@@ -748,6 +808,89 @@ p.error {
     /* Styles for plot image if added */
 }
 
+/* System Stats Bars */
+.stats-container {
+    margin-top: 1rem;
+}
+.stat-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    gap: 0.5rem;
+}
+.stat-label {
+    width: 50px; /* Fixed width for labels */
+    font-weight: 500;
+    font-size: 0.9rem;
+    text-align: right;
+}
+.stat-bar-container {
+    flex-grow: 1;
+    height: 20px;
+    background-color: var(--border-color); /* Background of the bar track */
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden; /* Hide overflow of inner bar */
+}
+.stat-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background-color: var(--primary-color); /* Default bar color */
+    border-radius: 3px 0 0 3px; /* Round left corners */
+    transition: width 0.3s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end; /* Push text to the right */
+}
+.stat-bar.cpu-bar { background-color: #3498db; }
+.stat-bar.ram-bar { background-color: #2ecc71; }
+.stat-bar.gpu-bar { background-color: #e74c3c; }
+.stat-bar.vram-bar { background-color: #9b59b6; }
+
+/* System stats states - Error and N/A */
+.stat-bar-container.error .stat-bar {
+    background-color: var(--error-color); /* Use error color for error state */
+}
+
+.stat-bar-container.na .stat-bar {
+    background-color: #888; /* Gray for N/A */
+    opacity: 0.5;
+}
+
+/* For the stat-value text */
+.stat-bar-container.na .stat-value {
+    color: #eee; /* Lighter text for N/A state */
+}
+
+.stat-value {
+    position: absolute; /* Position text over the bar */
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: white; /* Text color on the bar */
+    text-shadow: 1px 1px 1px rgba(0,0,0,0.4); /* Add shadow for readability */
+    padding: 0 0.25rem;
+}
+/* Adjust text color in dark mode if needed */
+body.dark-mode .stat-value {
+     color: #f0f0f0;
+     text-shadow: 1px 1px 1px rgba(0,0,0,0.6);
+}
+
+.gpu-details {
+    font-size: 0.85rem;
+    color: #666;
+    margin-top: 0.5rem;
+    padding-left: 55px; /* Align with bars */
+}
+body.dark-mode .gpu-details {
+     color: #aaa;
+}
+
 
 /* Responsive Adjustments */
 
@@ -855,4 +998,145 @@ p.error {
 /* Prevent horizontal scroll */
 body {
     overflow-x: hidden;
+}
+
+/* Collapsible Sections Styling */
+.collapsible-section {
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.collapsible-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background-color: var(--panel-bg, #f8f9fa);
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+}
+
+.collapsible-header h4 {
+    margin: 0;
+}
+
+.collapsible-content {
+    padding: 1rem;
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+}
+
+.collapsible-content.collapsed {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    padding: 0 1rem;
+    border-bottom: none;
+}
+
+.collapsible-content.expanded {
+    max-height: 2000px; /* Large enough to fit content */
+    opacity: 1;
+    overflow: visible; /* Allow content to be visible */
+}
+
+/* Visualization image container in collapsible section */
+.result-visualization-container {
+    max-width: 100%;
+    overflow: hidden;
+    margin-top: 1rem;
+}
+
+.result-visualization-container img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    object-fit: contain;
+}
+
+.collapse-toggle {
+    background: none;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--text-color);
+    padding: 0.25rem;
+    transition: transform 0.3s;
+}
+
+.collapse-toggle i {
+    transition: transform 0.3s;
+}
+
+.collapse-toggle[aria-expanded="false"] i {
+    transform: rotate(180deg);
+}
+
+/* Dark mode adjustments */
+body.dark-mode .collapsible-header {
+    background-color: var(--card-bg, #2d2d2d);
+}
+
+/* Modal Styles */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1000; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.6); /* Black w/ opacity */
+}
+
+.modal-content {
+    background-color: var(--panel-bg, #fefefe);
+    margin: 10% auto; /* 10% from the top and centered */
+    padding: 2rem;
+    border: 1px solid var(--border-color, #888);
+    width: 80%; /* Could be more or less, depending on screen size */
+    max-width: 600px; /* Maximum width */
+    border-radius: 5px;
+    position: relative;
+}
+
+.close-button {
+    color: var(--text-color, #aaa);
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: var(--error-color, black); /* Use error color for emphasis */
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.modal h2 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+}
+
+.project-list { /* Style for the list inside the modal */
+    max-height: 400px; /* Limit height and allow scrolling */
+    overflow-y: auto;
+}
+
+/* Reuse project-item styles from main list, maybe adjust padding */
+.modal .project-item {
+    padding: 0.75rem 1rem; /* Slightly less padding */
+}
+
+.modal .load-project-button {
+    padding: 0.4rem 0.8rem; /* Smaller button */
+    font-size: 0.8rem;
 }

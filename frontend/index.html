@@ -46,25 +46,42 @@
                     <button id="quick-run-preset" class="primary-button">Run Preset Pipeline</button>
                 </div>
                 <div class="dashboard-card">
-                    <h3>Current Configuration</h3>
-                    <div id="dashboard-config-summary">
-                        <p>Loading configuration...</p>
+                    <h3>System Stats <button id="refresh-stats-btn" class="icon-button" title="Refresh Stats"><i class="fas fa-sync-alt"></i></button></h3>
+                    <div id="dashboard-system-stats" class="stats-container">
+                        <!-- CPU -->
+                        <div class="stat-item">
+                            <span class="stat-label">CPU</span>
+                            <div class="stat-bar-container cpu-bar-container">
+                                <div class="stat-bar cpu-bar" style="width: 0%;"></div>
+                                <span class="stat-value">Loading...</span>
+                            </div>
+                        </div>
+                        <!-- RAM -->
+                        <div class="stat-item">
+                            <span class="stat-label">RAM</span>
+                            <div class="stat-bar-container ram-bar-container">
+                                <div class="stat-bar ram-bar" style="width: 0%;"></div>
+                                <span class="stat-value">Loading...</span>
+                            </div>
+                        </div>
+                        <!-- GPU -->
+                        <div class="stat-item">
+                            <span class="stat-label">GPU</span>
+                            <div class="stat-bar-container gpu-bar-container">
+                                <div class="stat-bar gpu-bar" style="width: 0%;"></div>
+                                <span class="stat-value">Loading...</span>
+                            </div>
+                        </div>
+                        <!-- VRAM -->
+                        <div class="stat-item">
+                            <span class="stat-label">VRAM</span>
+                            <div class="stat-bar-container vram-bar-container">
+                                <div class="stat-bar vram-bar" style="width: 0%;"></div>
+                                <span class="stat-value">Loading...</span>
+                            </div>
+                        </div>
                     </div>
-                    <button id="dashboard-edit-config" class="secondary-button">Edit Configuration</button>
-                </div>
-                <div class="dashboard-card">
-                    <h3>Recent Results</h3>
-                    <div id="dashboard-recent-results">
-                        <p>Loading recent results...</p>
-                    </div>
-                    <button id="dashboard-view-results" class="secondary-button">View All Results</button>
-                </div>
-                <div class="dashboard-card" id="dashboard-active-project-card"> <!-- Added ID -->
-                    <h3>Active Project Details</h3>
-                    <div id="dashboard-active-project">
-                        <p>No active project. Create or activate one from the Projects panel.</p>
-                        <!-- Details will be populated here -->
-                    </div>
+                    <p id="gpu-details" class="gpu-details">Loading GPU details...</p>
                 </div>
                 <div class="dashboard-card"> <!-- Moved About section -->
                     <h3>About QGW Detector</h3>
@@ -323,5 +340,7 @@
     <script src="js/visualizations.js"></script> <!-- Load Visualizations before Projects -->
     <script src="js/projects.js"></script> <!-- Load Projects before App -->
     <script src="js/app.js"></script> <!-- App should be last -->
+
+    <!-- System stats have been restored; modal removed -->
 </body>
 </html>

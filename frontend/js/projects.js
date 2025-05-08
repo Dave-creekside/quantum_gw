@@ -5,14 +5,14 @@
 
 const ProjectsModule = (() => {
     // DOM elements
-    const createProjectButton = document.getElementById('create-project-button'); // Renamed from save-project-button
+    const createProjectButton = document.getElementById('create-project-button');
     const projectNameInput = document.getElementById('project-name');
     const projectsListContainer = document.getElementById('projects-list-container');
     const activeProjectDisplay = document.getElementById('active-project-display');
 
     // State
     let activeProjectId = null;
-    let activeProjectName = null;
+    let activeProjectData = null; // Store the full data of the active project
 
     /**
      * Create a new project workspace.
@@ -30,20 +30,14 @@ const ProjectsModule = (() => {
 
         // Get current configuration to use as base
         console.log("Fetching current config for base configuration...");
-        const configResponse = await API.getConfig();
-        if (!configResponse.success) {
-            alert('Failed to get current configuration for the new project.');
-            console.error("Create failed: Could not get current config.", configResponse.error);
-            return false;
-        }
-        console.log("Base config fetched:", configResponse.data);
-
-        const currentPipeline = getCurrentPipelineConfig();
+        const currentParameters = ConfigModule.getCurrentConfigValues(); // Use ConfigModule
+        const currentPipeline = PipelinesModule.getCurrentPipeline(); // Use PipelinesModule
+        console.log("Base parameters fetched:", currentParameters);
         console.log("Base pipeline config:", currentPipeline);
 
         const baseConfiguration = {
-            event_name: configResponse.data.event_name,
-            parameters: { ...configResponse.data },
+            // event_name is part of parameters now
+            parameters: currentParameters,
             pipeline_config: currentPipeline,
         };
         console.log("Base configuration object for new project:", baseConfiguration);
@@ -63,7 +57,8 @@ const ProjectsModule = (() => {
             loadProjectsList(); // Refresh the list
             // Automatically activate the newly created project
             if (createResponse.data && createResponse.data.project_id) {
-                activateProject(createResponse.data.project_id, name);
+                // Need the full project data to activate, API returns it now
+                activateProject(createResponse.data.project_id, createResponse.data.project_data);
             }
             return true;
         } else {
@@ -71,25 +66,7 @@ const ProjectsModule = (() => {
             return false;
         }
     };
-    
-    /**
-     * Get the current pipeline configuration from UI
-     */
-    const getCurrentPipelineConfig = () => {
-        // Try to get from pipeline stages UI
-        const stages = document.querySelectorAll('.pipeline-stage');
-        if (stages && stages.length > 0) {
-            return Array.from(stages).map(stage => {
-                const qubits = parseInt(stage.querySelector('.qubit-select').value);
-                const topology = stage.querySelector('.topology-select').value;
-                return [qubits, topology];
-            });
-        }
-        
-        // Otherwise, use a default configuration
-        return [[4, "star"]];
-    };
-    
+
     /**
      * Load the list of saved projects.
      */
@@ -101,7 +78,6 @@ const ProjectsModule = (() => {
 
         console.log("Loading projects list...");
         projectsListContainer.innerHTML = '<p>Loading projects...</p>'; // Show loading state
-        // No need for global loading indicator here, just local feedback
 
         const response = await API.listProjects();
         console.log("Load projects list API response:", response);
@@ -114,7 +90,7 @@ const ProjectsModule = (() => {
             projectsListContainer.innerHTML = `<p class="error">Error loading projects: ${response.error}</p>`;
         }
     };
-    
+
     /**
      * Display the list of projects in the UI.
      */
@@ -149,13 +125,13 @@ const ProjectsModule = (() => {
             // Add 'active' class if this project is the currently active one
             const isActive = project.id === activeProjectId;
             html += `
-                <li class="project-item ${isActive ? 'active' : ''}" data-id="${project.id}" data-name="${project.name}">
+                <li class="project-item ${isActive ? 'active' : ''}" data-id="${project.id}">
                     <div class="project-details">
                         <h4>${project.name}</h4>
                         <div class="project-meta">Created: ${formatDate(project.timestamp)}</div>
                     </div>
                     <div class="project-actions">
-                        <button class="activate-project-button" data-id="${project.id}" data-name="${project.name}">Activate</button>
+                        <button class="activate-project-button" data-id="${project.id}">Activate</button>
                         <!-- Add delete button later if needed -->
                     </div>
                 </li>
@@ -167,83 +143,88 @@ const ProjectsModule = (() => {
         // Add event listeners to activate buttons
         const activateButtons = projectsListContainer.querySelectorAll('.activate-project-button');
         activateButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
+            button.addEventListener('click', async (e) => {
                 const projectId = e.currentTarget.dataset.id;
-                const projectName = e.currentTarget.dataset.name;
-                activateProject(projectId, projectName);
+                UI.showLoading('Activating project...');
+                const response = await API.loadProject(projectId); // Load full data on click
+                UI.hideLoading();
+                if (response.success) {
+                    activateProject(projectId, response.data); // Pass full data
+                } else {
+                    alert(`Error loading project: ${response.error}`);
+                }
             });
         });
     };
-    
+
     /**
-     * Activate a project: Set it as the current workspace context.
+     * Activate a project: Load its config and update UI
+     * Now accepts full project data object.
      */
-    const activateProject = async (projectId, projectName) => {
-        console.log(`Activating project: ${projectName} (ID: ${projectId})`);
-        UI.showLoading('Activating project...');
-
-        const response = await API.loadProject(projectId);
-        UI.hideLoading();
-
-        if (response.success) {
-            activeProjectId = projectId;
-            activeProjectName = projectName;
-            console.log("Active project set:", { id: activeProjectId, name: activeProjectName });
-
-            // Update UI to reflect active project
-            updateActiveProjectDisplay();
-            highlightActiveProjectInList(projectId);
-
-            // Load base configuration into UI
-            const projectData = response.data;
-            const baseConfig = projectData.base_configuration?.parameters || {};
-            const basePipeline = projectData.base_configuration?.pipeline_config || [];
-
-            console.log("Loading base config:", baseConfig);
-            const configUpdateResponse = await API.updateConfig(baseConfig);
-            if (!configUpdateResponse.success) {
-                alert(`Error loading project configuration: ${configUpdateResponse.error}`);
-                // Continue activation but log error
-            } else {
-                 // Refresh config display if module exists
-                if (typeof ConfigModule !== 'undefined' && ConfigModule.loadConfig) {
-                    ConfigModule.loadConfig();
-                }
-            }
-
-            console.log("Loading base pipeline:", basePipeline);
-            if (typeof PipelinesModule !== 'undefined' && PipelinesModule.setCustomPipeline) {
-                PipelinesModule.setCustomPipeline(basePipeline);
-            }
-
-            // Update dashboard
-            updateDashboardProjectInfo(); // Call the function to update dashboard
-
-            alert(`Project "${projectName}" activated.`);
-        } else {
-            alert(`Error activating project: ${response.error}`);
-            activeProjectId = null; // Clear active project on error
-            activeProjectName = null;
-            updateActiveProjectDisplay();
-            highlightActiveProjectInList(null);
+    const activateProject = (projectId, projectData) => {
+        if (!projectData || !projectId) {
+            console.error("Activation failed: Invalid project ID or data.");
+            return;
         }
-    };
+        if (activeProjectId === projectId) {
+            console.log(`Project ${projectId} is already active.`);
+            return; // Already active
+        }
 
-    // Removed startNewProject function as it's redundant with create + activate
+        console.log(`Activating project: ${projectData.name} (ID: ${projectId})`);
+        activeProjectId = projectId;
+        activeProjectData = projectData; // Store the full project data
+
+        console.log('Activating project data:', activeProjectData);
+
+        // Update the main application configuration
+        if (activeProjectData.base_configuration && activeProjectData.base_configuration.parameters) {
+            ConfigModule.setConfigValues(activeProjectData.base_configuration.parameters);
+            console.log("Loaded project parameters into ConfigModule.");
+        } else {
+             console.warn("Project loaded, but base configuration parameters are missing.");
+             // Optionally reset config to defaults or leave as is
+        }
+
+        // Update the pipeline builder
+        if (activeProjectData.base_configuration && activeProjectData.base_configuration.pipeline_config) {
+            PipelinesModule.loadPipeline(activeProjectData.base_configuration.pipeline_config);
+            console.log("Loaded project pipeline into PipelinesModule.");
+        } else {
+             console.warn("Project loaded, but base pipeline configuration is missing.");
+             // Optionally clear the pipeline builder
+             PipelinesModule.clearPipeline();
+        }
+
+        // Update the UI
+        updateActiveProjectDisplay();
+        highlightActiveProjectInList(projectId); // Highlight in the main list
+        UI.updateDashboardActiveProject(); // Update dashboard card
+
+        // Optionally, trigger updates in other modules like Visualizations
+        if (typeof VisualizationsModule !== 'undefined' && VisualizationsModule.loadProjectRuns) {
+            VisualizationsModule.loadProjectRuns(projectId);
+        }
+
+        console.log(`Project '${activeProjectData.name}' activated.`);
+        // No alert needed here as it's called internally now mostly
+    };
 
     /**
      * Update the display showing the currently active project.
      */
     const updateActiveProjectDisplay = () => {
         if (activeProjectDisplay) {
-            if (activeProjectId && activeProjectName) {
-                activeProjectDisplay.textContent = `Active Project: ${activeProjectName}`;
+            if (activeProjectData) {
+                activeProjectDisplay.textContent = `Active Project: ${activeProjectData.name}`;
                 activeProjectDisplay.style.display = 'block';
             } else {
                 activeProjectDisplay.textContent = 'Active Project: None (Unsaved)';
                  activeProjectDisplay.style.display = 'block'; // Keep it visible
             }
         }
+        // Also update the dashboard card
+        UI.updateDashboardActiveProject();
     };
 
      /**
@@ -262,88 +243,14 @@ const ProjectsModule = (() => {
      };
 
     /**
-     * Update the dashboard project info card.
+     * Update the locally stored active project data (e.g., after saving state).
      */
-    const updateDashboardProjectInfo = async () => {
-        console.log("Updating dashboard project info...", { activeProjectId, activeProjectName });
-        const container = document.getElementById('dashboard-active-project');
-        if (!container) {
-            console.warn("Dashboard active project container not found.");
-            return;
+    const updateActiveProjectData = (updatedData) => {
+        if (activeProjectId && updatedData && activeProjectId === updatedData.id) {
+            activeProjectData = updatedData;
+            console.log("Locally stored active project data updated.");
         }
-
-        if (!activeProjectId) {
-            container.innerHTML = `
-                <h4>Unsaved Project</h4>
-                <p>Create or activate a project from the Projects panel.</p>
-                <div class="dashboard-metric awaiting-run">
-                    <span>SNR:</span> Awaiting Run
-                </div>
-                <div class="dashboard-metric awaiting-run">
-                    <span>Max QFI:</span> Awaiting Run
-                </div>
-                <div class="dashboard-metric">
-                     <span>LIGO Event:</span> <span id="dashboard-project-event">N/A</span>
-                </div>
-                <div id="dashboard-event-plot-container"></div>
-            `;
-            // Update event name based on current config
-            const config = await API.getConfig();
-            const eventSpan = document.getElementById('dashboard-project-event');
-            if (eventSpan && config.success) {
-                 eventSpan.textContent = config.data.event_name || 'N/A';
-                 // TODO: Add call to fetch and display event plot
-            }
-            return;
-        }
-
-        // Fetch project details and associated runs
-        container.innerHTML = `<p>Loading project details...</p>`; // Loading state
-        console.log(`[updateDashboardProjectInfo] Fetching runs for project ${activeProjectId}`);
-        const runsResponse = await API.getProjectRuns(activeProjectId);
-        console.log(`[updateDashboardProjectInfo] Runs response:`, runsResponse);
-
-        if (!runsResponse.success) {
-            console.error(`[updateDashboardProjectInfo] Error loading runs: ${runsResponse.error}`);
-            container.innerHTML = `<p class="error">Error loading project runs: ${runsResponse.error}</p>`;
-            return;
-        }
-
-        const runs = runsResponse.data;
-        const latestRun = (runs && runs.length > 0) ? runs[0] : null; // Assumes sorted newest first
-
-        // Fetch CURRENT config for event name
-        const configResponse = await API.getConfig();
-        const eventName = configResponse.success ? (configResponse.data.event_name || 'N/A') : 'N/A';
-        console.log(`[updateDashboardProjectInfo] Current event name from config: ${eventName}`);
-
-        let snrHtml = '<div class="dashboard-metric awaiting-run"><span>SNR:</span> Awaiting Run</div>';
-        let qfiHtml = '<div class="dashboard-metric awaiting-run"><span>Max QFI:</span> Awaiting Run</div>';
-
-        if (latestRun && !latestRun.error) {
-            snrHtml = `<div class="dashboard-metric"><span>SNR:</span> ${UI.formatValue(latestRun.final_snr, 'decimal')}</div>`;
-            qfiHtml = `<div class="dashboard-metric"><span>Max QFI:</span> ${UI.formatValue(latestRun.max_qfi, 'decimal')}</div>`;
-        } else if (latestRun && latestRun.error) {
-             snrHtml = `<div class="dashboard-metric error"><span>SNR:</span> Error</div>`;
-             qfiHtml = `<div class="dashboard-metric error"><span>Max QFI:</span> Error</div>`;
-        }
-
-        container.innerHTML = `
-            <h4>${activeProjectName || 'Unnamed Project'}</h4>
-            ${snrHtml}
-            ${qfiHtml}
-            <div class="dashboard-metric">
-                 <span>LIGO Event:</span> ${eventName}
-            </div>
-            <div id="dashboard-event-plot-container">
-                 <!-- TODO: Add event plot image here -->
-                 <p><small>Event data plot coming soon...</small></p>
-            </div>
-        `;
-         // TODO: Add call to fetch and display event plot for 'eventName'
     };
-    
-    // Removed visualizeProject function as visualization is now handled differently
 
     /**
      * Initialize the projects module.
@@ -351,13 +258,9 @@ const ProjectsModule = (() => {
     const init = () => {
         console.log("Initializing ProjectsModule...");
 
-        // Rename "Save Project" to "Create Project"
         if (createProjectButton) {
             console.log("Create project button found, adding listener.");
-            createProjectButton.addEventListener('click', () => {
-                console.log("Create Project button clicked!"); // Add log here
-                createNewProject();
-            });
+            createProjectButton.addEventListener('click', createNewProject);
         } else {
             console.warn("Create project button (#create-project-button) not found.");
         }
@@ -366,9 +269,6 @@ const ProjectsModule = (() => {
              console.warn("Project name input (#project-name) not found.");
         }
 
-        // Removed listener for startNewProjectButton
-
-        // Load projects list if the container element exists
         if (projectsListContainer) {
             console.log("Projects list container (#projects-list-container) found, calling loadProjectsList.");
             loadProjectsList(); // Initial load
@@ -386,9 +286,9 @@ const ProjectsModule = (() => {
         createNewProject,
         loadProjectsList,
         activateProject,
-        // Removed startNewProject from export
-        getActiveProjectId: () => activeProjectId, // Function to get the current active project ID
-        updateDashboardProjectInfo // Expose the dashboard update function
+        getActiveProjectId: () => activeProjectId,
+        getActiveProject: () => activeProjectData, // Expose full active project data
+        updateActiveProjectData // Expose function to update local data
     };
 })();
 

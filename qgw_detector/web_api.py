@@ -226,6 +226,38 @@ def get_project_runs(project_id: str):
         print(f"Error getting runs for project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class UpdateProjectConfigRequest(BaseModel):
+    parameters: Dict[str, Any]
+    pipeline_config: List[Tuple[int, str]]
+
+@app.put("/api/projects/{project_id}/configuration")
+def update_project_configuration(project_id: str, request: UpdateProjectConfigRequest):
+    """Update the base configuration of a specific project"""
+    try:
+        # Prepare the data structure expected by the API method
+        new_config_data = {
+            "parameters": request.parameters,
+            "pipeline_config": request.pipeline_config
+        }
+        return api.update_project_configuration(project_id, new_config_data)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Project with ID {project_id} not found")
+    except ValueError as ve: # Catch validation errors from API method
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        print(f"Error updating configuration for project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/system_stats")
+def get_system_stats():
+    """Get current system resource statistics"""
+    try:
+        return api.get_system_stats()
+    except Exception as e:
+        print(f"Error getting system stats: {e}")
+        # Return a specific error structure or just raise 500
+        raise HTTPException(status_code=500, detail=f"Failed to get system stats: {e}")
+
 @app.get("/events")
 def get_events():
     return api.get_available_events()
